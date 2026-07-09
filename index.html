@@ -41,9 +41,22 @@
   .group-toggle { font-family: monospace; font-size: 14px; width: 14px; text-align: center; flex-shrink: 0; }
   .group-body { padding-left: 2px; }
   .group-body label { margin-left: 4px; }
+  .ctrl-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 4px 6px; background: #455a64; color: white;
+    font-size: 12px; font-weight: bold; border-radius: 3px 3px 0 0;
+    cursor: pointer; user-select: none;
+  }
+  .ctrl-header:hover { background: #37474f; }
+  .ctrl-toggle {
+    font-family: monospace; font-size: 16px; width: 20px; height: 20px;
+    text-align: center; line-height: 20px; cursor: pointer; flex-shrink: 0;
+    background: rgba(255,255,255,0.2); border-radius: 3px;
+  }
+  .ctrl-toggle:hover { background: rgba(255,255,255,0.4); }
 
   #help-btn {
-    position: absolute; top: 10px; right: 10px; z-index: 1000;
+    position: absolute; top: 10px; left: 60px; z-index: 1000;
     background: white; border: 2px solid rgba(0,0,0,0.2);
     border-radius: 4px; width: 34px; height: 34px;
     cursor: pointer; font-size: 18px; font-weight: bold;
@@ -690,7 +703,18 @@ L.Control.AccordionLayers = L.Control.extend({
     var self = this;
     var container = L.DomUtil.create('div', 'leaflet-control-layers leaflet-control-layers-expanded');
     L.DomEvent.disableClickPropagation(container).disableScrollPropagation(container);
+    var header = L.DomUtil.create('div', 'ctrl-header', container);
+    var hTitle = L.DomUtil.create('span', '', header);
+    hTitle.textContent = '📡 Capas';
+    var toggleBtn = L.DomUtil.create('span', 'ctrl-toggle', header);
+    toggleBtn.textContent = '+';
     var list = L.DomUtil.create('div', 'leaflet-control-layers-list', container);
+    list.style.display = 'none';
+    L.DomEvent.on(header, 'click', function () {
+      var collapsed = list.style.display === 'none';
+      list.style.display = collapsed ? '' : 'none';
+      toggleBtn.textContent = collapsed ? '−' : '+';
+    });
     var baseDiv = L.DomUtil.create('div', 'leaflet-control-layers-base', list);
     L.DomUtil.create('div', 'layers-title', baseDiv).textContent = '🗺 Mapas Base';
     var first = true;
