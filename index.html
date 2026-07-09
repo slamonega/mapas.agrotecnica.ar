@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mapa Interactivo - Ciencias del Suelo (SAOCOM + Sentinel + Landsat + SMAP)</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<style>
+  html, body, #map { height: 100%; margin: 0; padding: 0; }
+  #info-panel {
+    position: absolute; bottom: 30px; left: 10px; z-index: 1000;
+    background: white; padding: 10px; border-radius: 5px;
+    box-shadow: 0 0 15px rgba(0,0,0,0.2);
+    font-family: Arial, sans-serif; font-size: 12px; max-width: 300px;
+    max-height: 180px; overflow-y: auto;
+  }
+  #info-panel h4 { margin: 0 0 5px 0; font-size: 13px; }
+  #info-panel p { margin: 3px 0; }
+  #info-panel .desc { margin-top: 5px; border-top: 1px solid #ddd; padding-top: 4px; font-size: 11px; color: #555; }
+  .leaflet-control-layers { overflow-y: auto; max-height: 75vh; max-width: 280px; }
+  .leaflet-control-layers label { font-size: 12px; }
+
+  #help-btn {
+    position: absolute; top: 10px; right: 10px; z-index: 1000;
+    background: white; border: 2px solid rgba(0,0,0,0.2);
+    border-radius: 4px; width: 34px; height: 34px;
+    cursor: pointer; font-size: 18px; font-weight: bold;
+    display: flex; align-items: center; justify-content: center;
+    color: #666;
+  }
+  #help-btn:hover { background: #f4f4f4; }
+
+  #help-modal {
+    display: none; position: fixed; top: 0; left: 0; z-index: 2000;
+    width: 100%; height: 100%; background: rgba(0,0,0,0.5);
+  }
+  #help-modal.show { display: flex; align-items: center; justify-content: center; }
+  #help-content {
+    background: white; border-radius: 8px; max-width: 750px;
+    max-height: 85vh; width: 90%; overflow-y: auto; padding: 20px;
+    font-family: Arial, sans-serif; position: relative;
+  }
+  #help-content h2 { margin-top: 0; color: #333; border-bottom: 2px solid #4a90d9; padding-bottom: 8px; }
+  #help-content h3 { color: #4a90d9; margin: 18px 0 6px 0; font-size: 15px; }
+  #help-content h4 { margin: 6px 0 3px 0; font-size: 13px; color: #555; }
+  #help-content p { font-size: 13px; line-height: 1.5; color: #444; margin: 4px 0; }
+  #help-content table { width: 100%; border-collapse: collapse; margin: 8px 0; font-size: 12px; }
+  #help-content th, #help-content td { border: 1px solid #ddd; padding: 6px 8px; text-align: left; }
+  #help-content th { background: #4a90d9; color: white; }
+  #help-content tr:nth-child(even) { background: #f9f9f9; }
+  #help-content .close-btn {
+    position: sticky; top: 0; float: right; background: none;
+    border: none; font-size: 24px; cursor: pointer; color: #999;
+  }
+  #help-content .close-btn:hover { color: #333; }
+  #help-content .tag { display: inline-block; padding: 1px 6px; border-radius: 3px; font-size: 10px; font-weight: bold; margin-right: 4px; }
+  .tag-s2 { background: #e3f2fd; color: #1565c0; }
+  .tag-l8 { background: #fff3e0; color: #e65100; }
+  .tag-smap { background: #e8f5e9; color: #2e7d32; }
+  .tag-modis { background: #fce4ec; color: #c62828; }
+  .tag-viirs { background: #f3e5f5; color: #6a1b9a; }
+  .tag-saocom { background: #fff8e1; color: #f9a825; }
+  .tag-base { background: #eceff1; color: #37474f; }
+</style>
+</head>
+<body>
+<div id="map"></div>
+
+<div id="info-panel">
+  <h4>🌱 Ciencias del Suelo</h4>
+  <p>Datos satelitales libres para análisis edafológico</p>
+  <div class="desc" id="layer-desc">Hacé clic en una capa superpuesta para ver su descripción.</div>
+</div>
+
+<button id="help-btn" title="Guía de indicadores">?</button>
+
+<div id="help-modal">
+  <div id="help-content">
+    <button class="close-btn" id="close-help">&times;</button>
+    <h2>📖 Guía de Indicadores Satelitales para Ciencias del Suelo</h2>
+    <p>Cada capa satelital utiliza diferentes regiones del espectro electromagnético para medir propiedades del suelo y la vegetación. A continuación se explica qué significa cada indicador y cómo interpretarlo.</p>
+
+    <h3>🟦 Sentinal-2 (ESA, 10-20m, desde 2015)</h3>
+    <table>
+      <tr><th>Indicador</th><th>Qué mide</th><th>Interpretación</th><th>Fórmula / Bandas</th></tr>
+      <tr>
+        <td><b>NDVI</b></td>
+        <td>Vigor y cantidad de vegetación verde</td>
+        <td>Alto (&gt;0.6) = vegetación densa; Bajo (&lt;0.2) = suelo desnudo, agua o urbano; Negativo = agua</td>
+        <td>(B8 - B4) / (B8 + B4)</td>
+      </tr>
+      <tr>
+        <td><b>Falso Color IR</b></td>
+        <td>Vegetación en rojo, suelos en tonos claros</td>
+        <td>Rojo intenso = vegetación sana; Rosado = vegetación rala; Blanco/cian = suelo desnudo; Negro = agua</td>
+        <td>NIR (B8), Rojo (B4), Verde (B3)</td>
+      </tr>
+      <tr>
+        <td><b>Agricultura</b></td>
+        <td>Vigor vegetal + humedad superficial</td>
+        <td>Verde brillante = cultivo vigoroso; Verde opaco = estrés; Marrón = suelo desnudo o seco</td>
+        <td>SWIR1 (B11), NIR (B8), Azul (B2)</td>
+      </tr>
+      <tr>
+        <td><b>SWIR</b></td>
+        <td>Contenido de agua y minerales arcillosos</td>
+        <td>Tonos oscuros = alta humedad o arcilla; Claros = seco o arenoso; Útil para diferenciar tipos de suelo</td>
+        <td>SWIR2 (B12), SWIR1 (B11), Rojo (B4)</td>
+      </tr>
+      <tr>
+        <td><b>Geología</b></td>
+        <td>Composición mineral del suelo</td>
+        <td>Tonos naranja/rojo = óxidos de hierro; Azul/cian = carbonatos; Verde = arcillas</td>
+        <td>SWIR2 (B12), SWIR1 (B11), Azul (B2)</td>
+      </tr>
+    </table>
+
+    <h3>🟠 Landsat 8/9 (NASA/USGS, 30-100m, desde 1972)</h3>
+    <table>
+      <tr><th>Indicador</th><th>Qué mide</th><th>Interpretación</th><th>Fórmula / Bandas</th></tr>
+      <tr>
+        <td><b>NDVI</b></td>
+        <td>Vigor vegetal (similar a S2)</td>
+        <td>Idem Sentinel-2 NDVI. Útil para series históricas desde los 80s.</td>
+        <td>(B5 - B4) / (B5 + B4)</td>
+      </tr>
+      <tr>
+        <td><b>Temp. Superficial</b></td>
+        <td>Temperatura de la superficie del suelo (°C)</td>
+        <td>Más cálido = suelo desnudo, seco, urbano; Más frío = vegetación densa, agua, suelo húmedo. Revela zonas de estrés hídrico</td>
+        <td>Banda termal TIRS1 (B10)</td>
+      </tr>
+      <tr>
+        <td><b>Agricultura</b></td>
+        <td>Vigor + humedad (análogo a S2)</td>
+        <td>Idem Sentinel-2 Agricultura. Con datos desde 1984.</td>
+        <td>SWIR1 (B6), NIR (B5), Azul (B2)</td>
+      </tr>
+      <tr>
+        <td><b>Geología</b></td>
+        <td>Composición mineral (análogo a S2)</td>
+        <td>Idem Sentinel-2 Geología. Mejor para estudios multitemporales.</td>
+        <td>SWIR2 (B7), SWIR1 (B6), Azul (B2)</td>
+      </tr>
+    </table>
+
+    <h3>🟢 SMAP (NASA, 9km, desde 2015)</h3>
+    <table>
+      <tr><th>Indicador</th><th>Qué mide</th><th>Interpretación</th><th>Resolución</th></tr>
+      <tr>
+        <td><b>Humedad Superficial</b></td>
+        <td>Contenido de agua en los primeros 5 cm del suelo</td>
+        <td>Azul = húmedo; Marrón/rojo = seco. Escala de 0 a 0.9 m³/m³. Saturación cerca de ríos y después de lluvias</td>
+        <td>9 km, diaria</td>
+      </tr>
+      <tr>
+        <td><b>Humedad Zona Radicular</b></td>
+        <td>Agua disponible en los primeros 100 cm del perfil</td>
+        <td>Similar a superficial pero integra todo el perfil. Importante para disponibilidad hídrica de cultivos</td>
+        <td>9 km, diaria</td>
+      </tr>
+      <tr>
+        <td><b>Temperatura del Suelo</b></td>
+        <td>Temperatura en la capa superficial del suelo (K)</td>
+        <td>Tonos fríos/azules = menor temperatura; Cálidos/rojos = mayor temperatura. Relacionado con actividad microbiana y materia orgánica</td>
+        <td>9 km, 3-horaria</td>
+      </tr>
+    </table>
+
+    <h3>🔴 MODIS Terra (NASA, 250m-1km, desde 2000)</h3>
+    <table>
+      <tr><th>Indicador</th><th>Qué mide</th><th>Interpretación</th><th>Resolución</th></tr>
+      <tr>
+        <td><b>NDVI</b></td>
+        <td>Vigor vegetal (composiciones 8-días)</td>
+        <td>Idem NDVI de S2/Landsat pero con revisita diaria. Ideal para seguimiento temporal de cultivos y detección de cambios</td>
+        <td>250 m, 8 días</td>
+      </tr>
+      <tr>
+        <td><b>Temperatura Superficial</b></td>
+        <td>Temperatura de la superficie terrestre (LST)</td>
+        <td>Útil para estimar evapotranspiración, balance de energía, estrés hídrico. Las zonas más cálidas suelen ser suelos desnudos degradados</td>
+        <td>1 km, diaria</td>
+      </tr>
+    </table>
+
+    <h3>🟣 VIIRS (NOAA/NASA, 500m-750m, desde 2012)</h3>
+    <table>
+      <tr><th>Indicador</th><th>Qué mide</th><th>Interpretación</th><th>Resolución</th></tr>
+      <tr>
+        <td><b>NDVI</b></td>
+        <td>Vigor vegetal (composiciones 8-días)</td>
+        <td>Análogo a MODIS NDVI pero con mejor calibración y sin gaps. Continuidad operativa</td>
+        <td>500 m, 8 días</td>
+      </tr>
+      <tr>
+        <td><b>Temperatura Superficial</b></td>
+        <td>Temperatura superficial (continuidad de MODIS)</td>
+        <td>Idem MODIS LST pero con mejor resolución espacial (750m) y operativo actualmente</td>
+        <td>750 m, diaria</td>
+      </tr>
+    </table>
+
+    <h3>🟡 SAOCOM (CONAE, Argentina, banda-L)</h3>
+    <table>
+      <tr><th>Indicador</th><th>Qué mide</th><th>Interpretación</th><th>Resolución</th></tr>
+      <tr>
+        <td><b>Humedad del Perfil 50cm</b></td>
+        <td>Contenido volumétrico de agua en el perfil hasta 50cm</td>
+        <td>Producto krigeado (DSS_MSMKR). Cubre la región pampeana argentina. Único producto nacional con radar banda-L</td>
+        <td>~1 km, diaria</td>
+      </tr>
+    </table>
+
+    <h3>📌 Recomendaciones de uso</h3>
+    <p><b>Para análisis de suelos desnudos:</b> activar S2 Agricultura o S2 SWIR con mapa base Sentinel-2 Cloudless. El contraste entre vegetación y suelo permite delimitar áreas sin cobertura.</p>
+    <p><b>Para humedad del suelo:</b> comparar SAOCOM (perfil 50cm, regional) con SMAP (global, superficial y radicular). SAOCOM tiene mejor resolución espacial pero solo cubre región pampeana.</p>
+    <p><b>Para temperatura:</b> Landsat TIRS (30m, mejor resolución, pasada cada 16 días) vs MODIS/VIIRS (1km/750m, diario).</p>
+    <p><b>Para series temporales largas:</b> Landsat (desde 1972) + MODIS (desde 2000) permiten analizar cambios en el uso del suelo y degradación.</p>
+  </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+// ---- Custom TileLayer for ESRI ImageServer (Sentinel-2 & Landsat) ----
+L.TileLayer.ESRIImageServer = L.TileLayer.extend({
+  options: {
+    renderingRule: '{"rasterFunction":"Natural Color with DRA"}',
+    maxZoom: 14, minZoom: 2,
+    attribution: 'Source: Esri, European Commission, ESA, AWS, USGS'
+  },
+  initialize: function (baseUrl, options) {
+    this._esriUrl = baseUrl;
+    L.TileLayer.prototype.initialize.call(this, undefined, options);
+    this._worldMetersMax = 20037508.342789244;
+    this._worldMetersRange = this._worldMetersMax * 2;
+  },
+  getTileUrl: function (coords) {
+    var z = coords.z, x = coords.x, y = coords.y;
+    var ts = this.options.tileSize || 256;
+    var tws = this._worldMetersRange / Math.pow(2, z);
+    var xmin = -this._worldMetersMax + x * tws;
+    var xmax = xmin + tws;
+    var ymax = this._worldMetersMax - y * tws;
+    var ymin = ymax - tws;
+    var bbox = [xmin.toFixed(4), ymin.toFixed(4), xmax.toFixed(4), ymax.toFixed(4)].join(',');
+    var rule = encodeURIComponent(this.options.renderingRule);
+    return this._esriUrl + '?bbox=' + bbox + '&bboxSR=102100&size=' + ts + ',' + ts +
+      '&imageSR=102100&format=png&interpolation=RSP_BilinearInterpolation&renderingRule=' + rule + '&f=image';
+  }
+});
+
+L.tileLayer.esriImageServer = function (baseUrl, options) {
+  return new L.TileLayer.ESRIImageServer(baseUrl, options);
+};
+
+// ---- GIBS WMS helper ----
+function gibsLayer(layerName, opts) {
+  return L.tileLayer.wms('https://gibs.earthdata.nasa.gov/wms/epsg3857/best/wms.cgi', L.extend({
+    layers: layerName, format: 'image/png', transparent: true,
+    version: '1.1.1', attribution: 'NASA GIBS'
+  }, opts));
+}
+
+// ---- Inicializar mapa ----
+var map = L.map('map', { maxZoom: 18 }).setView([-36.5, -60.5], 5);
+
+// ---- BASEMAPS ----
+var osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  maxZoom: 19, attribution: '© OpenStreetMap contributors'
+});
+var s2cloudless = L.tileLayer('https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless-2025_3857/default/g/{z}/{y}/{x}.jpg', {
+  maxZoom: 18, attribution: 'Sentinel-2 cloudless - https://s2maps.eu by EOX (Contains modified Copernicus Sentinel data 2025)'
+});
+var ign = L.tileLayer('https://wms.ign.gob.ar/geoserver/gwc/service/tms/1.0.0/capabaseargenmap@EPSG:3857@png/{z}/{x}/{y}.png', {
+  maxZoom: 18, tms: true, attribution: '© <a href="https://www.ign.gob.ar">IGN Argentina</a>'
+});
+osm.addTo(map);
+
+// ---- SENTINEL-2 derived (via ESRI ImageServer) ----
+var S2_BASE = 'https://sentinel.arcgis.com/arcgis/rest/services/Sentinel2/ImageServer/exportImage';
+var s2ndvi = L.tileLayer.esriImageServer(S2_BASE, {
+  renderingRule: '{"rasterFunction":"NDVI Colormap"}', maxZoom: 14, minZoom: 2,
+  attribution: 'NDVI | Esri, ESA, AWS'
+});
+var s2ir = L.tileLayer.esriImageServer(S2_BASE, {
+  renderingRule: '{"rasterFunction":"Color Infrared with DRA"}', maxZoom: 14, minZoom: 2,
+  attribution: 'Color IR | Esri, ESA, AWS'
+});
+var s2agri = L.tileLayer.esriImageServer(S2_BASE, {
+  renderingRule: '{"rasterFunction":"Agriculture with DRA"}', maxZoom: 14, minZoom: 2,
+  attribution: 'Agriculture | Esri, ESA, AWS'
+});
+var s2swir = L.tileLayer.esriImageServer(S2_BASE, {
+  renderingRule: '{"rasterFunction":"Short-wave Infrared with DRA"}', maxZoom: 14, minZoom: 2,
+  attribution: 'SWIR | Esri, ESA, AWS'
+});
+var s2geo = L.tileLayer.esriImageServer(S2_BASE, {
+  renderingRule: '{"rasterFunction":"Geology with DRA"}', maxZoom: 14, minZoom: 2,
+  attribution: 'Geology | Esri, ESA, AWS'
+});
+
+// ---- LANDSAT (via ESRI ImageServer) ----
+var L8_BASE = 'https://landsat2.arcgis.com/arcgis/rest/services/Landsat/MS/ImageServer/exportImage';
+var l8ndvi = L.tileLayer.esriImageServer(L8_BASE, {
+  renderingRule: '{"rasterFunction":"NDVI Colorized"}', maxZoom: 13, minZoom: 2,
+  attribution: 'NDVI | Esri, USGS, NASA'
+});
+var l8temp = L.tileLayer.esriImageServer(L8_BASE, {
+  renderingRule: '{"rasterFunction":"Band 10 Surface Temperature in Celsius"}', maxZoom: 13, minZoom: 2,
+  attribution: 'LST °C | Esri, USGS, NASA'
+});
+var l8agri = L.tileLayer.esriImageServer(L8_BASE, {
+  renderingRule: '{"rasterFunction":"Agriculture with DRA"}', maxZoom: 13, minZoom: 2,
+  attribution: 'Agriculture | Esri, USGS, NASA'
+});
+var l8geo = L.tileLayer.esriImageServer(L8_BASE, {
+  renderingRule: '{"rasterFunction":"Geology with DRA"}', maxZoom: 13, minZoom: 2,
+  attribution: 'Geology | Esri, USGS, NASA'
+});
+
+// ---- SMAP (NASA GIBS WMS) ----
+var smapSurf = gibsLayer('SMAP_L4_Analyzed_Surface_Soil_Moisture', {
+  maxZoom: 8, minZoom: 2, attribution: 'SMAP Surface SM | NASA GIBS'
+});
+var smapRoot = gibsLayer('SMAP_L4_Analyzed_Root_Zone_Soil_Moisture', {
+  maxZoom: 8, minZoom: 2, attribution: 'SMAP Root Zone SM | NASA GIBS'
+});
+var smapTemp = gibsLayer('SMAP_L4_Soil_Temperature_Layer_1', {
+  maxZoom: 8, minZoom: 2, attribution: 'SMAP Soil Temp | NASA GIBS'
+});
+
+// ---- MODIS Terra (NASA GIBS WMS) ----
+var modisNdvi = gibsLayer('MODIS_Terra_NDVI_8Day', {
+  maxZoom: 10, minZoom: 2, attribution: 'MODIS NDVI | NASA GIBS'
+});
+var modisLst = gibsLayer('MODIS_Terra_Land_Surface_Temp_Day', {
+  maxZoom: 9, minZoom: 2, attribution: 'MODIS LST | NASA GIBS'
+});
+
+// ---- VIIRS (NASA GIBS WMS) ----
+var viirsNdvi = gibsLayer('VIIRS_SNPP_NDVI_8Day', {
+  maxZoom: 10, minZoom: 2, attribution: 'VIIRS NDVI | NASA GIBS'
+});
+var viirsLst = gibsLayer('VIIRS_SNPP_Land_Surface_Temp_Day', {
+  maxZoom: 9, minZoom: 2, attribution: 'VIIRS LST | NASA GIBS'
+});
+
+// ---- SAOCOM ----
+var saocom = L.tileLayer.wms('https://geoservicios3.conae.gov.ar/geoserver/HumedadDeSuelos/wms', {
+  layers: 'DSS_MSMKR_1', styles: 'estilo_DSS_MSM', format: 'image/png',
+  transparent: true, version: '1.1.1', attribution: '© CONAE - SAOCOM', opacity: 0.75
+}).addTo(map);
+
+// ---- LAYER CONTROL ----
+var baseMaps = {
+  "🗺 OpenStreetMap": osm,
+  "🛰 Sentinel-2 Cloudless 2025": s2cloudless,
+  "🇦🇷 IGN Argentina": ign
+};
+
+// Group overlays by mission
+var overlayMaps = {
+  // SAOCOM
+  "<span class='tag tag-saocom'>SAOCOM</span> Humedad Perfil 50cm": saocom,
+  // Sentinel-2
+  "<span class='tag tag-s2'>S2</span> NDVI (vegetación)": s2ndvi,
+  "<span class='tag tag-s2'>S2</span> Falso Color IR": s2ir,
+  "<span class='tag tag-s2'>S2</span> Agricultura": s2agri,
+  "<span class='tag tag-s2'>S2</span> SWIR (humedad/mineralogía)": s2swir,
+  "<span class='tag tag-s2'>S2</span> Geología": s2geo,
+  // Landsat
+  "<span class='tag tag-l8'>L8</span> NDVI (vegetación)": l8ndvi,
+  "<span class='tag tag-l8'>L8</span> Temp. Superficial °C": l8temp,
+  "<span class='tag tag-l8'>L8</span> Agricultura": l8agri,
+  "<span class='tag tag-l8'>L8</span> Geología": l8geo,
+  // SMAP
+  "<span class='tag tag-smap'>SMAP</span> Humedad Superficial": smapSurf,
+  "<span class='tag tag-smap'>SMAP</span> Humedad Zona Radicular": smapRoot,
+  "<span class='tag tag-smap'>SMAP</span> Temperatura del Suelo": smapTemp,
+  // MODIS
+  "<span class='tag tag-modis'>MODIS</span> NDVI (8 días)": modisNdvi,
+  "<span class='tag tag-modis'>MODIS</span> Temp. Superficial": modisLst,
+  // VIIRS
+  "<span class='tag tag-viirs'>VIIRS</span> NDVI (8 días)": viirsNdvi,
+  "<span class='tag tag-viirs'>VIIRS</span> Temp. Superficial": viirsLst
+};
+
+L.control.layers(baseMaps, overlayMaps, { collapsed: false }).addTo(map);
+
+// ---- Actualizar descripción de capa activa ----
+var descs = {
+  "Humedad Perfil 50cm": "SAOCOM: Humedad del perfil de suelo hasta 50cm (producto krigeado). Contenido volumétrico de agua (m³/m³) derivado de radar banda-L. Cubre región pampeana argentina.",
+  "NDVI (vegetación)": "NDVI = (NIR - Rojo) / (NIR + Rojo). Mide vigor vegetal. Alto = vegetación densa, Bajo < 0.2 = suelo desnudo. Útil para detectar áreas sin cobertura, erosión y estrés hídrico.",
+  "Falso Color IR": "Composición NIR-Rojo-Verde. Vegetación sana aparece en rojo/violeta. Suelos desnudos en tonos claros. Permite delimitar rápidamente áreas con y sin cobertura vegetal.",
+  "Agricultura": "Composición SWIR1-NIR-Azul. Vegetación vigorosa en verde brillante, suelos desnudos en marrón. Resalta diferencias en humedad superficial y contenido de arcilla.",
+  "SWIR (humedad/mineralogía)": "Composición SWIR2-SWIR1-Rojo. Sensible al contenido de agua y minerales arcillosos. Tonos oscuros = mayor humedad/arcilla. Claros = seco/arenoso.",
+  "Geología": "Composición SWIR2-SWIR1-Azul. Destaca óxidos de hierro (naranja/rojo), carbonatos (azul/cian), arcillas (verde). Ayuda a identificar materiales parentales del suelo.",
+  "Temp. Superficial °C": "Landsat TIRS: Temperatura de la superficie en °C derivada de la banda termal. Zonas más cálidas = suelo desnudo/seco. Más frías = vegetación/agua/suelo húmedo.",
+  "Humedad Superficial": "SMAP L4: Humedad de los primeros 5 cm del suelo. Azul = húmedo, marrón/rojo = seco. Escala 0-0.9 m³/m³. Resolución 9 km.",
+  "Humedad Zona Radicular": "SMAP L4: Humedad en los primeros 100 cm del perfil. Indica el agua disponible para las plantas. Importante para evaluar disponibilidad hídrica de cultivos.",
+  "Temperatura del Suelo": "SMAP L4: Temperatura en la capa superficial del suelo (Kelvin). Relacionada con actividad microbiana, descomposición de materia orgánica y procesos edáficos.",
+  "NDVI (8 días)": "MODIS/VIIRS NDVI en composiciones de 8 días. Similar al NDVI de S2 pero con revisita diaria. Ideal para seguimiento temporal de ciclos de cultivo y detección de cambios estacionales.",
+  "Temp. Superficial": "MODIS/VIIRS LST diurna. Temperatura de la superficie terrestre. Las zonas más cálidas suelen corresponder a suelos desnudos o degradados. Útil para balance hídrico y evapotranspiración."
+};
+
+map.on('overlayadd', function (e) {
+  var name = e.name.replace(/<[^>]+>/g, '').trim();
+  var found = null;
+  for (var key in descs) { if (name.indexOf(key) !== -1 || key.indexOf(name) !== -1) { found = descs[key]; break; } }
+  document.getElementById('layer-desc').textContent = found || 'Seleccioná una capa superpuesta para ver su descripción.';
+});
+
+// ---- Help Modal ----
+document.getElementById('help-btn').onclick = function () {
+  document.getElementById('help-modal').classList.add('show');
+};
+document.getElementById('close-help').onclick = function () {
+  document.getElementById('help-modal').classList.remove('show');
+};
+document.getElementById('help-modal').onclick = function (e) {
+  if (e.target === this) this.classList.remove('show');
+};
+</script>
+</body>
+</html>
