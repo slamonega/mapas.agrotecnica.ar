@@ -155,6 +155,12 @@
         <td>Naranja/rojo = óxidos de hierro; Azul/cian = carbonatos; Verde = arcillas. Útil para materiales parentales</td>
         <td>SWIR2-SWIR1-Azul</td>
       </tr>
+      <tr>
+        <td><b>NBR (Normalized Burn Ratio)</b></td>
+        <td>Severidad de quemas (NIR-SWIR2)/(NIR+SWIR2)</td>
+        <td>Valores negativos = área quemada. Cuanto más negativo, mayor severidad. Se usa para delimitar lotes quemados, evaluar daño por incendios en campos y montes, y monitorear regeneración post-fuego</td>
+        <td>(B8-B12)/(B8+B12)</td>
+      </tr>
     </table>
 
     <h3>🟠 Landsat 8/9 (NASA/USGS, 30-100m, desde 1972)</h3>
@@ -189,6 +195,12 @@
         <td>Composición mineral</td>
         <td>Idem S2 Geología. Datos desde 1984</td>
         <td>SWIR2-SWIR1-Azul</td>
+      </tr>
+      <tr>
+        <td><b>NBR (Normalized Burn Ratio)</b></td>
+        <td>Severidad de quemas (idem S2)</td>
+        <td>Idem NBR de S2. Serie histórica Landsat desde 1984 para analizar recurrencia de incendios y recuperación de la vegetación a lo largo de décadas</td>
+        <td>(B5-B7)/(B5+B7)</td>
       </tr>
     </table>
 
@@ -254,6 +266,18 @@
         <td>Las zonas más cálidas = suelos desnudos o degradados. Útil para balance hídrico y estimación de ET</td>
         <td>1 km, diaria</td>
       </tr>
+      <tr>
+        <td><b>Fuegos Activos</b></td>
+        <td>Anomalías térmicas (fuegos activos)</td>
+        <td>Detecta píxeles con temperatura de brillo anómala. Útil para monitorear incendios en campos, detectar quemas agrícolas no autorizadas y dar seguimiento a evolución de focos de calor</td>
+        <td>1 km, diaria</td>
+      </tr>
+      <tr>
+        <td><b>Cobertura de Nieve (NDSI)</b></td>
+        <td>Nieve diaria (NDSI, índice Nieve-SWIR)</td>
+        <td>En zonas cordilleranas: monitorear área nival, estimar disponibilidad de agua de deshielo para riego, evaluar riesgo de heladas</td>
+        <td>500 m, diaria</td>
+      </tr>
     </table>
 
     <h3>🟣 VIIRS (NOAA/NASA, 500m-750m, desde 2012)</h3>
@@ -276,6 +300,12 @@
         <td>LST (continuidad MODIS)</td>
         <td>Idem MODIS LST. Mejor resolución (750m vs 1km). Operativo actualmente</td>
         <td>750 m, diaria</td>
+      </tr>
+      <tr>
+        <td><b>Fuegos Activos 375m</b></td>
+        <td>Anomalías térmicas (fuegos activos)</td>
+        <td>Idem MODIS pero con mejor resolución (375m). Detecta fuegos de menor tamaño. Útil para detección temprana de incendios y monitoreo más preciso de focos de calor en campos y montes</td>
+        <td>375 m, diaria</td>
       </tr>
     </table>
 
@@ -597,7 +627,7 @@ var grace = gibsLayer('GRACE_Tellus_Liquid_Water_Equivalent_Thickness_Mascon_CRI
 var saocom = L.tileLayer.wms('https://geoservicios3.conae.gov.ar/geoserver/HumedadDeSuelos/wms', {
   layers: 'DSS_MSMKR_1', styles: 'estilo_DSS_MSM', format: 'image/png',
   transparent: true, version: '1.1.1', attribution: '© CONAE - SAOCOM', opacity: 0.75
-}).addTo(map);
+});
 
 // ---- SoilGrids (ISRIC WMS) ----
 var sgPH = soilGridsLayer('phh2o', '0-5cm', 'Q0.5');
@@ -610,6 +640,29 @@ var sgBulkDens = soilGridsLayer('bdod', '0-5cm', 'Q0.5');
 var sgNitrogen = soilGridsLayer('nitrogen', '0-5cm', 'Q0.5');
 var sgWaterFC = soilGridsLayer('wv0010', '0-5cm', 'Q0.5');
 var sgWaterPWP = soilGridsLayer('wv1500', '0-5cm', 'Q0.5');
+
+// ---- NBR (Normalized Burn Ratio - ESRI ImageServer) ----
+var s2nbr = L.tileLayer.esriImageServer(S2_BASE, {
+  renderingRule: '{"rasterFunction":"Normalized Burn Ratio"}', maxZoom: 14, minZoom: 2,
+  attribution: 'S2 NBR | Esri, ESA, AWS'
+});
+var l8nbr = L.tileLayer.esriImageServer(L8_BASE, {
+  renderingRule: '{"rasterFunction":"NBR Raw"}', maxZoom: 13, minZoom: 2,
+  attribution: 'L8 NBR | Esri, USGS, NASA'
+});
+
+// ---- Fuegos Activos (NASA GIBS WMS) ----
+var modisFires = gibsLayer('MODIS_Combined_Thermal_Anomalies_Day', {
+  maxZoom: 9, minZoom: 2, attribution: 'MODIS Fires | NASA GIBS'
+});
+var viirsFires = gibsLayer('VIIRS_SNPP_Thermal_Anomalies_375m_All', {
+  maxZoom: 10, minZoom: 2, attribution: 'VIIRS Fires 375m | NASA GIBS'
+});
+
+// ---- Cobertura de Nieve (NASA GIBS WMS) ----
+var modisSnow = gibsLayer('MODIS_Terra_L3_NDSI_Snow_Cover_Daily', {
+  maxZoom: 10, minZoom: 2, attribution: 'MODIS Snow Cover | NASA GIBS'
+});
 
 // ---- LAYER CONTROL with group separators ----
 var baseMaps = {
@@ -738,6 +791,12 @@ var groups = [
     "<span class='tag tag-s2'>S2</span> SWIR (agua/arcilla)": s2swir,
     "<span class='tag tag-s2'>S2</span> Geología (minerales)": s2geo
   }},
+  { name: '🔥 Incendios y Quemas', layers: {
+    "<span class='tag tag-s2'>S2</span> NBR (índice de quemas)": s2nbr,
+    "<span class='tag tag-l8'>L8</span> NBR (índice de quemas)": l8nbr,
+    "<span class='tag tag-modis'>MODIS</span> Fuegos Activos": modisFires,
+    "<span class='tag tag-viirs'>VIIRS</span> Fuegos Activos 375m": viirsFires
+  }},
   { name: '🟠 LANDSAT 8/9', layers: {
     "<span class='tag tag-l8'>L8</span> NDVI (vegetación)": l8ndvi,
     "<span class='tag tag-l8'>L8</span> NDMI (humedad dosel)": l8ndmi,
@@ -762,6 +821,9 @@ var groups = [
     "<span class='tag tag-viirs'>VIIRS</span> NDVI (8 días)": viirsNdvi,
     "<span class='tag tag-viirs'>VIIRS</span> EVI (8 días)": viirsEvi,
     "<span class='tag tag-viirs'>VIIRS</span> Temp. Superficial": viirsLst
+  }},
+  { name: '❄️ Cobertura de Nieve', layers: {
+    "<span class='tag tag-modis'>MODIS</span> Nieve (NDSI diario)": modisSnow
   }},
   { name: '🌧 Precipitación', layers: {
     "<span class='tag tag-clima'>GPM</span> IMERG Precipitación": imerg
@@ -916,7 +978,27 @@ var descs = {
 
   "Agua PMP (1500kPa)":
     "ISRIC SoilGrids | Punto de marchitez permanente (Water content at 1500 kPa) en % v/v, capa 0-5 cm. Es la cantidad de agua retenida por el suelo a una succión de 1500 kPa, por debajo de la cual las plantas no pueden extraer agua y se marchitan irreversiblemente. Depende principalmente de la textura (arcilla > arena). Se usa para calcular el agua útil (CC - PMP) y determinar la fracción de agotamiento permitido para programar el riego.\n"+
-    "Colores (SoilGrids WV1500): Azul oscuro = alta retención en PMP (>25%), suelos arcillosos donde el agua está fuertemente retenida · Azul = moderada (12-25%) · Azul claro = baja (<12%), suelos arenosos donde casi toda el agua está disponible a bajas succiones. Agua útil (CC - PMP) suele ser mayor en suelos francos que en arcillosos o arenosos"
+    "Colores (SoilGrids WV1500): Azul oscuro = alta retención en PMP (>25%), suelos arcillosos donde el agua está fuertemente retenida · Azul = moderada (12-25%) · Azul claro = baja (<12%), suelos arenosos donde casi toda el agua está disponible a bajas succiones. Agua útil (CC - PMP) suele ser mayor en suelos francos que en arcillosos o arenosos",
+
+  "S2 NBR":
+    "S2 NBR | Normalized Burn Ratio, (B8-B12)/(B8+B12), calculado sobre reflectancia aparente de Sentinel-2. El índice usa el infrarrojo cercano (B8) y el SWIR2 (B12) para resaltar áreas quemadas: las zonas quemadas muestran baja reflectancia NIR y alta SWIR, generando valores NBR negativos. Se usa para mapear la severidad de incendios, delimitar áreas afectadas por quemas agrícolas, monitorear regeneración post-fuego y cuantificar superficie quemada en campos. Para medir severidad se calcula el dNBR (diferencia entre NBR pre y post fuego).\n"+
+    "Colores (ESRI Normalized Burn Ratio, valores -1 a 1): Blanco/crema = sin quemar o vegetación sana (>0.1) · Gris claro = baja severidad, vegetación afectada parcialmente (-0.1 a 0.1) · Gris oscuro = severidad moderada (-0.3 a -0.1) · Negro = severidad alta, completamente quemado (<-0.3) · Azul = agua",
+
+  "L8 NBR":
+    "L8 NBR | Normalized Burn Ratio, (B5-B7)/(B5+B7), calculado sobre reflectancia aparente de Landsat 8/9 en valores brutos. Utiliza el NIR (Banda 5) y SWIR2 (Banda 7) para resaltar áreas quemadas. La serie histórica Landsat (desde 1984) permite analizar la recurrencia de incendios y la recuperación de la vegetación a lo largo de décadas. Se usa para mapear severidad de quemas en campos, evaluar daño en pastizales y montes nativos, y planificar la recuperación de áreas afectadas.\n"+
+    "Colores (ESRI NBR Raw, escala -1 a 1, valores lineales): Valores altos positivos = vegetación sana, sin quemar · Valores cercanos a 0 = transición, suelo desnudo o vegetación afectada · Valores negativos = área quemada, más negativo = mayor severidad",
+
+  "MODIS Fuegos Activos":
+    "MODIS | Anomalías térmicas diurnas detectadas por el algoritmo contextual de fuego activo de MODIS, a bordo de Terra y Aqua, resolución 1 km a nadir. Detecta píxeles con temperatura de brillo anómala en la banda 4 μm (MIR) en comparación con el fondo circundante. Se usa para monitorear la ocurrencia de incendios en campos, detectar quemas agrícolas no autorizadas, localizar focos de calor en pastizales y montes, y dar seguimiento a la evolución de incendios activos a escala regional.\n"+
+    "Colores (NASA GIBS Thermal Anomalies): Rojo/naranja = fuego activo de alta intensidad · Amarillo = fuego de menor intensidad o fuego de pastizal · El tamaño del punto varía con la confianza de detección (puntos más grandes = mayor confianza)",
+
+  "VIIRS Fuegos Activos 375m":
+    "VIIRS S-NPP | Anomalías térmicas detectadas por el algoritmo de fuego activo del sensor VIIRS (Visible Infrared Imaging Radiometer Suite) a bordo del Suomi-NPP, resolución 375 m (mejor que MODIS 1 km). El algoritmo utiliza las bandas M13 (4 μm) e I4 (3.74 μm) con un umbral contextual adaptativo para detectar píxeles de fuego incluso de menor tamaño. Se usa para detección temprana de incendios forestales y de campos, monitoreo de focos de calor con mayor precisión espacial que MODIS, y cuantificación de área afectada por quemas.\n"+
+    "Colores (NASA GIBS VIIRS 375m): Rojo = fuego activo de alta intensidad · Naranja/amarillo = fuego de intensidad media a baja. Tamaño del punto = confianza de detección",
+
+  "MODIS Nieve":
+    "MODIS Terra | NDSI (Normalized Difference Snow Index) diario a 500 m, derivado de MODIS Terra (MOD10A1). El NDSI se calcula como (Verde - SWIR1)/(Verde + SWIR1) usando las bandas 4 (0.555 μm) y 6 (1.64 μm), donde la nieve tiene alta reflectancia en el visible y baja en SWIR. Se usa en zonas cordilleranas de Argentina para monitorear la cobertura nival, estimar la disponibilidad de agua de deshielo para riego, evaluar el riesgo de heladas y planificar la liberación de agua de embalses.\n"+
+    "Colores (NASA GIBS Snow Cover): Cian/blanco = nieve detectada (NDSI > 0.4) · Azul oscuro/negro = nieve posible (NDSI 0.1-0.4) · Transparente = sin nieve (NDSI < 0.1) · Rojo/rosa = nubes"
 };
 
 // ---- Help Modal ----
