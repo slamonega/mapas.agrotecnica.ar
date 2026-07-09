@@ -14,9 +14,7 @@
     font-family: Arial, sans-serif; font-size: 12px; max-width: 300px;
     max-height: 180px; overflow-y: auto;
   }
-  #info-panel h4 { margin: 0 0 5px 0; font-size: 13px; }
-  #info-panel p { margin: 3px 0; }
-  #info-panel .desc { margin-top: 5px; border-top: 1px solid #ddd; padding-top: 4px; font-size: 11px; color: #555; }
+  #info-panel .desc { font-size: 11px; color: #444; line-height: 1.4; }
   .leaflet-control-layers { font-size: 12px; }
   .leaflet-control-layers-list { overflow-y: auto; max-height: 75vh; }
   .leaflet-control-layers label {
@@ -95,9 +93,7 @@
 <div id="map"></div>
 
 <div id="info-panel">
-  <h4>🌱 Agronomía Satelital</h4>
-  <p>Datos libres para manejo de cultivos y suelos</p>
-  <div class="desc" id="layer-desc">Seleccioná una capa para ver su descripción.</div>
+  <div class="desc" id="layer-desc">Seleccioná una capa para ver qué mide, para qué se usa y cómo interpretar sus colores.</div>
 </div>
 
 <button id="help-btn" title="Guía de indicadores">?</button>
@@ -639,7 +635,7 @@ L.Control.AccordionLayers = L.Control.extend({
   onAdd: function (map) {
     this._map = map;
     var self = this;
-    var container = L.DomUtil.create('div', 'leaflet-control-layers leaflet-control');
+    var container = L.DomUtil.create('div', 'leaflet-control-layers leaflet-control-layers-expanded');
     L.DomEvent.disableClickPropagation(container).disableScrollPropagation(container);
     var list = L.DomUtil.create('div', 'leaflet-control-layers-list', container);
     var baseDiv = L.DomUtil.create('div', 'leaflet-control-layers-base', list);
@@ -718,6 +714,18 @@ var groups = [
   { name: '🟡 SAOCOM', layers: {
     "<span class='tag tag-saocom'>SAOCOM</span> Humedad Perfil 50cm": saocom
   }},
+  { name: '🧪 Suelo (SoilGrids 250m)', layers: {
+    "<span class='tag tag-sg'>SG</span> pH (0-5cm)": sgPH,
+    "<span class='tag tag-sg'>SG</span> Carbono Orgánico SOC": sgSOC,
+    "<span class='tag tag-sg'>SG</span> Arcilla (textura)": sgClay,
+    "<span class='tag tag-sg'>SG</span> Arena (textura)": sgSand,
+    "<span class='tag tag-sg'>SG</span> Limo (textura)": sgSilt,
+    "<span class='tag tag-sg'>SG</span> CIC (nutrientes)": sgCEC,
+    "<span class='tag tag-sg'>SG</span> Densidad Aparente": sgBulkDens,
+    "<span class='tag tag-sg'>SG</span> Nitrógeno Total": sgNitrogen,
+    "<span class='tag tag-sg'>SG</span> Agua CC (10kPa)": sgWaterFC,
+    "<span class='tag tag-sg'>SG</span> Agua PMP (1500kPa)": sgWaterPWP
+  }},
   { name: '🟦 SENTINEL-2 (Índices)', layers: {
     "<span class='tag tag-s2'>S2</span> NDVI (vegetación)": s2ndvi,
     "<span class='tag tag-s2'>S2</span> NDMI (humedad dosel)": s2ndmi,
@@ -767,59 +775,148 @@ var groups = [
   { name: '🏞 Agua Subterránea', layers: {
     "<span class='tag tag-grace'>GRACE</span> Anomalía Agua Total": grace
   }},
-  { name: '🧪 Suelo (SoilGrids 250m)', layers: {
-    "<span class='tag tag-sg'>SG</span> pH (0-5cm)": sgPH,
-    "<span class='tag tag-sg'>SG</span> Carbono Orgánico SOC": sgSOC,
-    "<span class='tag tag-sg'>SG</span> Arcilla (textura)": sgClay,
-    "<span class='tag tag-sg'>SG</span> Arena (textura)": sgSand,
-    "<span class='tag tag-sg'>SG</span> Limo (textura)": sgSilt,
-    "<span class='tag tag-sg'>SG</span> CIC (nutrientes)": sgCEC,
-    "<span class='tag tag-sg'>SG</span> Densidad Aparente": sgBulkDens,
-    "<span class='tag tag-sg'>SG</span> Nitrógeno Total": sgNitrogen,
-    "<span class='tag tag-sg'>SG</span> Agua CC (10kPa)": sgWaterFC,
-    "<span class='tag tag-sg'>SG</span> Agua PMP (1500kPa)": sgWaterPWP
-  }}
 ];
 
 new L.Control.AccordionLayers(baseMaps, groups).addTo(map);
 
-// ---- Actualizar descripción de capa activa ----
+// ---- Descripciones de capas ----
+// Formato: [Sensor] [qué mide] | [uso agronómico] | [escala de colores]
 var descs = {
-  "Humedad Perfil 50cm": "SAOCOM: Humedad del perfil de suelo hasta 50cm (producto krigeado). Contenido volumétrico de agua (m³/m³) derivado de radar banda-L. Cubre región pampeana argentina.",
-  "NDVI (vegetación)": "NDVI = (NIR - Rojo) / (NIR + Rojo). Mide vigor vegetal. Alto > 0.6 = cultivo denso, Bajo < 0.2 = suelo desnudo. Satura en cultivos muy vigorosos, usar NDRE como alternativa.",
-  "NDMI (humedad dosel)": "NDMI = (NIR - SWIR1) / (NIR + SWIR1). Mide contenido de agua en el dosel. Detecta estrés hídrico antes que NDVI. Bajo = déficit hídrico o senescencia.",
-  "NDRE (Red Edge)": "NDRE = (B8 - B5) / (B8 + B5). No satura en cultivos densos. Ideal para monitoreo de nitrógeno y madurez en maíz, soja, trigo. Mejor correlación con clorofila que NDVI.",
-  "NDVI705 (VRE)": "NDVI705 = (B6 - B5) / (B6 + B5). Usa bandas de borde rojo. Sensible a cambios tempranos de clorofila. Detecta estrés nutricional en etapas iniciales.",
-  "Falso Color IR": "Composición NIR-Rojo-Verde. Vegetación sana en rojo/violeta. Suelos desnudos en tonos claros. Útil para delimitar lotes y cobertura vegetal.",
-  "Agricultura": "Composición SWIR1-NIR-Azul. Vegetación vigorosa en verde brillante, suelos desnudos en marrón. Resalta diferencias en humedad superficial y arcilla.",
-  "SWIR (agua/arcilla)": "Composición SWIR2-SWIR1-Rojo. Sensible a contenido de agua y minerales arcillosos. Oscuro = húmedo/arcilloso. Claro = seco/arenoso.",
-  "Geología (minerales)": "Composición SWIR2-SWIR1-Azul. Naranja/rojo = óxidos de Fe, azul = carbonatos, verde = arcillas. Materiales parentales del suelo.",
-  "Temp. Superficial °C": "Landsat TIRS: Temperatura superficial en °C. Cálido = suelo desnudo/seco. Frío = vegetación/agua/suelo húmedo. Relacionado con evapotranspiración y estrés.",
-  "Humedad Superficial": "SMAP L4: Humedad de los primeros 5 cm del suelo. Azul = húmedo, marrón/rojo = seco. Escala 0-0.9 m³/m³.",
-  "Humedad Zona Radicular": "SMAP L4: Humedad en los primeros 100 cm del perfil. Agua disponible para el cultivo. Importante para riego y estimación de rendimiento.",
-  "SMAP+S1 (1km)": "SMAP/Sentinel-1 combinado: Humedad activa-pasiva con 1km de resolución. Mejor que SMAP solo (9km). Radar Sentinel-1 + radiómetro SMAP.",
-  "Temperatura del Suelo": "SMAP L4: Temperatura superficial (Kelvin). Relacionada con actividad microbiana, mineralización de N y descomposición de materia orgánica.",
-  "NDVI (8 días)": "MODIS/VIIRS NDVI en composiciones 8d. Revisita diaria. Ideal para seguimiento temporal de ciclos de cultivo y fenología.",
-  "EVI (16 días)": "MODIS/VIIRS EVI: Índice de vegetación mejorado. Corrige saturación en altas biomasas y ruido del suelo. Mejor que NDVI en bosques y cultivos densos.",
-  "EVI (8 días)": "VIIRS EVI: Igual que MODIS EVI pero mejor resolución (500m vs 1km). Continuidad operativa actual.",
-  "GPP (productividad)": "MODIS GPP: Productividad Bruta (fotosíntesis total). kg C/m²/día. Correlacionado con rendimiento de cultivos.",
-  "FPAR (radiación)": "MODIS FPAR: Fracción de radiación fotosintética absorbida (0-100%). Relacionada con LAI y cobertura vegetal.",
-  "Temp. Superficial": "MODIS/VIIRS LST diurna. Zonas cálidas = suelo desnudo/degradado. Útil para balance hídrico y estimación de evapotranspiración.",
-  "IMERG Precipitación": "GPM IMERG: Precipitación diaria (~10km). Lluvia acumulada. Útil para monitoreo de sequía, excesos y planificación de riego.",
-  "Onda Corta Superficial": "CERES: Radiación solar difusa en superficie (W/m²). Energía disponible para fotosíntesis y ET.",
+  "Humedad Perfil 50cm":
+    "SAOCOM | Humedad volumétrica del suelo en el perfil 0-50cm derivada de radar banda-L, producto krigeado diario que cubre la región pampeana (m³/m³). Se usa para evaluar disponibilidad hídrica de los cultivos, planificar riego complementario y detectar excesos o déficits de agua en el perfil explorado por raíces.\n"+
+    "Colores (documentación CONAE DSS_MSMKR): Azul oscuro = muy húmedo (>0.35 m³/m³) · Verde = moderado (0.20-0.35) · Amarillo = bajo (0.15-0.20) · Marrón/rojo = muy seco (<0.15) · Transparente = fuera de cobertura",
 
-  "Land Cover IGBP": "MODIS Land Cover: Clasificación anual (17 clases). Cultivos, pasturas, bosques, agua. Delimita áreas agrícolas y cambios de uso.",
-  "Anomalía Agua Total": "GRACE: Variaciones en almacenamiento total de agua (superficial + acuíferos). cm equivalente agua. Escala de cuenca.",
-  "pH (0-5cm)": "SoilGrids pH en agua. 5.5-7 óptimo para cultivos. <5 ácido (toxicidad Al). >8 alcalino (deficiencia Fe/Zn).",
-  "Carbono Orgánico SOC": "SoilGrids SOC: Carbono orgánico en g/kg. >15 alto, 8-15 medio, <8 bajo. Fertilidad, estructura y actividad biológica.",
-  "Arcilla (textura)": "SoilGrids: Fracción <0.002mm en %. >35% alta retención agua/nutrientes, drenaje lento. <15% baja retención.",
-  "Arena (textura)": "SoilGrids: Fracción 0.05-2mm en %. >65% arenoso, baja retención, alta permeabilidad, riesgo lixiviación.",
-  "Limo (textura)": "SoilGrids: Fracción 0.002-0.05mm en %. Suelos francos (alto limo + arcilla + arena balanceada) ideales para agricultura.",
-  "CIC (nutrientes)": "SoilGrids CIC: Capacidad de intercambio catiónico en cmol(c)/kg. >25 muy alta, <5 baja. Retención de Ca, Mg, K.",
-  "Densidad Aparente": "SoilGrids: Bulk density en kg/dm³. >1.6 compactado (restricción raíces). <1.2 suelto (alta MO).",
-  "Nitrógeno Total": "SoilGrids N total en g/kg. >2.5 alto, 1-2.5 medio, <1 bajo. Fertilidad nitrogenada y potencial de mineralización.",
-  "Agua CC (10kPa)": "SoilGrids: Capacidad de campo a 10kPa (% v/v). Agua retenida después de drenaje. Máximo agua disponible para el cultivo.",
-  "Agua PMP (1500kPa)": "SoilGrids: Punto de marchitez a 1500kPa (% v/v). Agua no disponible. Agua útil = CC - PMP."
+  "NDVI (vegetación)":
+    "S2 NDVI | Normalized Difference Vegetation Index, calculado como (NIR-Rojo)/(NIR+Rojo). Mide el vigor y la densidad de la vegetación a partir de la reflectancia del rojo e infrarrojo cercano. Se usa para monitoreo del estado de los cultivos, detección de estrés, estimación de cobertura vegetal y seguimiento fenológico. Satura en valores altos (>0.8) en cultivos muy densos.\n"+
+    "Colores (ESRI NDVI Colormap, escala -1 a 1): Verde oscuro = vegetación muy densa, bosque o cultivo en pleno desarrollo (>0.6) · Verde claro = vegetación moderada, pasturas o cultivo en crecimiento (0.3-0.6) · Amarillo/tostado = vegetación rala, estrés o senescencia (0.1-0.3) · Marrón/gris = suelo desnudo, rastrojo (0.0-0.1) · Azul/rojo = agua, nieve, urbano (<0.0)",
+
+  "NDMI (humedad dosel)":
+    "S2 NDMI | Normalized Difference Moisture Index, (NIR-SWIR1)/(NIR+SWIR1). Mide el contenido de agua en el dosel de la vegetación, usando la banda SWIR1 que es sensible a la absorción de agua. Se usa para detectar estrés hídrico en los cultivos antes de que se manifieste en el NDVI, monitorear senescencia y evaluar efectividad del riego.\n"+
+    "Colores (ESRI NDMI Colorized): Azul/cian = alta humedad en el dosel, cultivo hidratado · Verde claro = humedad moderada · Amarillo/naranja = baja humedad, estrés hídrico incipiente · Marrón = senescencia o cultivo seco · Blanco/gris = suelo desnudo",
+
+  "NDRE (Red Edge)":
+    "S2 NDRE | Normalized Difference Red Edge, (B8-B5)/(B8+B5). Utiliza el borde rojo (Red Edge, banda 5) que penetra más profundamente en el dosel y no satura en altas biomasas. Se usa para monitoreo de nitrógeno en cultivos (maíz, trigo, soja), estimación de clorofila en etapas reproductivas y detección de estrés nutricional en cultivos densos donde NDVI ya saturó.\n"+
+    "Colores (ESRI NDVI with VRE Raw, valores lineales): Blanco/verde muy claro = clorofila abundante, cultivo sano y bien nutrido · Gris medio = vigor moderado · Gris oscuro/negro = clorofila baja, suelo desnudo, estrés severo, senescencia",
+
+  "NDVI705 (VRE)":
+    "S2 NDVI705 (VRE only) | (B6-B5)/(B6+B5). Índice que usa exclusivamente bandas del borde rojo, extremadamente sensible a pequeños cambios en la concentración de clorofila. Se usa para detectar estrés nutricional o hídrico en etapas muy tempranas, antes que cualquier otro índice, y para discriminar especies con distinta concentración de clorofila.\n"+
+    "Colores (ESRI NDVI VRE only Raw, valores lineales): Blanco = concentración máxima de clorofila · Gris claro = concentración moderada · Gris oscuro = baja clorofila · Negro = sin vegetación, suelo desnudo",
+
+  "Falso Color IR":
+    "S2 Color Infrared | Composición de falso color usando bandas NIR-Rojo-Verde (B8-B4-B3). Diseñada para resaltar la vegetación sana en rojo, basado en la alta reflectancia NIR de las plantas. Se usa para delimitar rápidamente áreas con y sin cobertura vegetal, identificar lotes, detectar cursos de agua y reconocer patrones de humedad en el suelo.\n"+
+    "Colores (ESRI CIR with DRA): Rojo/magenta intenso = vegetación sana y densa · Rosado claro = vegetación rala, pastura o cultivo en recuperación · Blanco/cian = suelo desnudo, caminos, área urbana · Negro = agua, sombras profundas",
+
+  "Agricultura":
+    "S2 Agriculture | Composición SWIR1-NIR-Azul (B11-B8-B2). Optimizada para resaltar la vegetación vigorosa en verde brillante y el suelo desnudo en marrón, usando la absorción SWIR del agua para discriminar humedad. Se usa para evaluar vigor de cultivos, detectar diferencias de humedad superficial, identificar suelos desnudos y planificar muestreos de suelo.\n"+
+    "Colores (ESRI Agriculture with DRA): Verde brillante = cultivo vigoroso con alta humedad · Verde oliva = vegetación con estrés moderado · Marrón claro = suelo desnudo seco · Marrón oscuro/negro = suelo húmedo o quemado · Cian/azul = arcilla expuesta o agua",
+
+  "SWIR (agua/arcilla)":
+    "S2 SWIR | Composición SWIR2-SWIR1-Rojo (B12-B11-B4). Las bandas de infrarrojo de onda corta son sensibles al contenido de agua y a minerales arcillosos (absorciones en 2200nm y 2300nm). Se usa para diferenciar texturas de suelo (arcilloso vs arenoso), delimitar zonas con diferente capacidad de retención de agua y mapear áreas con riesgos de erosión hídrica.\n"+
+    "Colores (ESRI SWIR with DRA): Negro/marrón oscuro = alta humedad superficial o alto contenido de arcilla · Gris púrpura = moderado · Blanco/rosado = seco, arenoso, baja retención de agua · Verde = vegetación",
+
+  "Geología (minerales)":
+    "S2 Geology | Composición SWIR2-SWIR1-Azul (B12-B11-B2). Resalta diferencias en la composición mineralógica del suelo superficial basada en absorciones diagnósticas de minerales en el SWIR. Se usa para inferir materiales parentales del suelo, identificar zonas con óxidos de hierro (suelos rojos), carbonatos (suelos calcáreos) y arcillas, y delimitar cambios litológicos.\n"+
+    "Colores (ESRI Geology with DRA): Naranja/rojo intenso = óxidos de hierro, suelos lateríticos o ferrosos · Azul/cian = carbonatos, yeso, suelos calcáreos · Verde = arcillas, suelos con alto contenido de filosilicatos · Violeta/magenta = mezcla de minerales · Negro = agua",
+
+  "Temp. Superficial °C":
+    "L8 TIRS | Temperatura de la superficie terrestre derivada de la banda termal 10 (TIRS1) del sensor Landsat, en grados Celsius, corregida por emisividad con el método de la banda de diferencia. Se usa para estimar evapotranspiración, detectar estrés hídrico en cultivos (plantas con estrés cierran estomas y se calientan), identificar suelos desnudos y evaluar el balance de energía superficial.\n"+
+    "Colores (ESRI Band 10 Surface Temperature): Rojo/blanco = muy caliente (>45°C, suelo desnudo, asfalto) · Naranja = caliente (35-45°C, suelo seco) · Amarillo = templado (25-35°C, pastura, barbecho) · Verde = fresco (15-25°C, vegetación activa) · Azul oscuro/negro = frío (<15°C, agua, vegetación densa evapotranspirando)",
+
+  "Humedad Superficial":
+    "SMAP L4 | Soil Moisture Active Passive, humedad volumétrica de los primeros 5 cm del suelo. Producto de asimilación que combina observaciones del radiómetro SMAP (1.4 GHz, banda-L) con un modelo de superficie terrestre, escala 9 km. Se usa para detectar contenido de agua superficial, monitorear condiciones de siembra (ventana de humedad), evaluar riesgos de anegamiento y calibrar modelos de balance hídrico.\n"+
+    "Colores (NASA GIBS SMAP L4): Azul oscuro = muy húmedo (>0.40 m³/m³), saturación · Azul claro = húmedo (0.25-0.40), buena disponibilidad · Blanco/gris = moderado (0.15-0.25), transición · Marrón claro = bajo (0.10-0.15), déficit · Marrón rojizo = muy seco (<0.10), estrés severo",
+
+  "Humedad Zona Radicular":
+    "SMAP L4 | Humedad en los primeros 100 cm del perfil del suelo, estimada por el modelo de asimilación de SMAP que integra observaciones superficiales con la dinámica del agua en el suelo. Se usa para evaluar el agua realmente disponible para los cultivos, tomar decisiones de riego, estimar el rendimiento potencial y monitorear sequías agrícolas a escala regional.\n"+
+    "Colores (NASA GIBS SMAP L4): Azul = agua suficiente para el cultivo (>0.25 m³/m³) · Verde claro = moderado, sin estrés inmediato (0.18-0.25) · Amarillo = déficit incipiente (0.12-0.18) · Naranja/marrón = estrés severo (<0.12), riego necesario",
+
+  "SMAP+S1 (1km)":
+    "SMAP/Sentinel-1 | Humedad superficial activa-pasiva combinada, que integra el radiómetro SMAP (precisión) con el radar Sentinel-1 banda-C (alta resolución espacial) para producir humedad superficial a 1 km de resolución. Se usa donde se necesita más detalle que SMAP solo (9 km), como cuencas pequeñas, lotes grandes o estudios semidetallados.\n"+
+    "Colores (NASA GIBS SMAP+S1): Azul = húmedo · Verde = moderado · Marrón/rojo = seco. Escala similar a SMAP superficial (0-0.9 m³/m³)",
+
+  "Temperatura del Suelo":
+    "SMAP L4 | Temperatura de la capa superficial del suelo (primeros centímetros) en grados Kelvin, estimada por el modelo de asimilación de SMAP, con resolución 9 km y paso temporal 3-horario. Se usa para modelar actividad microbiana y mineralización de nitrógeno, estimar tasas de descomposición de materia orgánica, calcular emisiones de CO₂ del suelo y evaluar el efecto de coberturas y labranzas sobre la temperatura edáfica.\n"+
+    "Colores (NASA GIBS SMAP L4 Soil Temperature): Rojo/bordo = cálido (>305 K/~32°C), suelo desnudo expuesto · Naranja = templado (295-305 K/22-32°C) · Amarillo/verde = fresco (285-295 K/12-22°C) · Azul = frío (<285 K/<12°C), suelo húmedo o con cobertura vegetal densa",
+
+  "NDVI (8 días)":
+    "MODIS/VIIRS NDVI | Composición de 8 días del NDVI derivado de MODIS Terra (desde 2000, 250m) o VIIRS (desde 2012, 500m, continuidad operativa actual). La composición temporal reduce el efecto de nubes y ángulos de visión. Se usa para seguimiento continuo de la fenología de cultivos, detección de cambios estacionales, comparación interanual del vigor vegetal y monitoreo de sequías con series temporales largas.\n"+
+    "Colores (NASA GIBS, escala -1 a 1): Verde oscuro = vegetación densa (>0.6) · Verde claro = moderada (0.3-0.6) · Amarillo = baja (0.1-0.3) · Marrón/gris = suelo desnudo · Azul = agua",
+
+  "EVI (16 días)":
+    "MODIS EVI | Enhanced Vegetation Index, composición de 16 días a 1 km. Corrige la influencia del suelo de fondo y la atmósfera, y es menos propenso a saturación en altas biomasas que NDVI, manteniendo sensibilidad lineal en bosques y cultivos densos. Se usa para monitoreo de vegetación densa, estimación de productividad y estudios fenológicos en regiones con alta biomasa.\n"+
+    "Colores (NASA GIBS MODIS EVI): Verde oscuro = bosque o cultivo denso (>0.5) · Verde claro = moderado (0.3-0.5) · Amarillo = bajo (0.1-0.3) · Marrón = suelo desnudo (<0.1). Más lineal y con menos saturación que NDVI en valores altos",
+
+  "EVI (8 días)":
+    "VIIRS EVI | Idem MODIS EVI pero derivado del sensor VIIRS a bordo del satélite Suomi-NPP (desde 2012), con 500m de resolución (mejor que MODIS 1km) y composición de 8 días. Continuidad operativa actual del programa JPSS. Se usa como reemplazo de MODIS EVI con mejor resolución espacial y la misma interpretación.\n"+
+    "Colores (NASA GIBS VIIRS EVI): Idem MODIS EVI: Verde oscuro = denso (>0.5) · Amarillo = bajo (<0.2) · Marrón = suelo",
+
+  "GPP (productividad)":
+    "MODIS GPP | Gross Primary Productivity (MOD17A2), productividad primaria bruta en kg de carbono por metro cuadrado por día, derivada del modelo de eficiencia de uso de la luz de Monteith usando FPAR de MODIS y datos meteorológicos MERRA-2. Se usa para estimar la cantidad de carbono fijado por fotosíntesis, que se correlaciona directamente con la biomasa producida y el rendimiento potencial de los cultivos. Escala de ~0 a 0.01 kg C/m²/día.\n"+
+    "Colores (NASA GIBS MODIS GPP): Verde oscuro = alta productividad (>0.006), cultivo en pleno crecimiento · Verde claro = productividad media (0.003-0.006) · Amarillo = baja productividad (0.001-0.003) · Gris/marrón = muy baja o nula (<0.001), suelo desnudo o senescencia",
+
+  "FPAR (radiación)":
+    "MODIS FPAR | Fraction of Photosynthetically Active Radiation (MOD15A2H), fracción de la radiación fotosintéticamente activa (400-700nm) que es absorbida por el dosel vegetal, expresada como proporción de 0 a 1. Está directamente relacionada con el LAI (Leaf Area Index). Se usa para estimar la energía disponible para la fotosíntesis, modelar el crecimiento de cultivos y como entrada para modelos de productividad y evapotranspiración.\n"+
+    "Colores (NASA GIBS MODIS FPAR): Verde oscuro = alta absorción, dosel denso (>0.7, LAI alto) · Verde claro = absorción media (0.3-0.7, cobertura parcial) · Amarillo = absorción baja (0.1-0.3, vegetación rala) · Gris = sin vegetación (<0.1, suelo desnudo)",
+
+  "Temp. Superficial":
+    "MODIS/VIIRS LST | Land Surface Temperature diurna, temperatura de la superficie terrestre derivada de las bandas termales de MODIS (1 km) o VIIRS (750 m). Refleja el balance de energía superficial integrando radiación neta, calor sensible y latente. Se usa para estimar evapotranspiración (método contextual Ts/NDVI), detectar zonas de estrés hídrico, identificar suelos desnudos degradados y monitorear heladas.\n"+
+    "Colores (NASA GIBS LST diurna): Rojo/blanco = muy cálido (>40°C, suelo desnudo sin vegetación) · Naranja = cálido (30-40°C) · Amarillo = templado (20-30°C) · Verde = fresco (10-20°C, vegetación activa) · Azul = frío (<10°C, agua, nieve o nubes)",
+
+  "IMERG Precipitación":
+    "GPM IMERG | Integrated Multi-satellitE Retrievals for GPM, precipitación diaria con resolución de ~10 km, que integra datos de sensores de microondas (GMI, AMSR2, SSMIS) e infrarrojos calibrados con TRMM/GPM. Se usa para monitorear lluvia acumulada, detectar déficits y excesos hídricos, planificar riego complementario estimando la lámina de agua recibida, y como entrada para balances hídricos.\n"+
+    "Colores (NASA GIBS IMERG): Azul oscuro = lluvia intensa (>10 mm/h) · Azul = lluvia moderada (2-10 mm/h) · Cian = lluvia leve (0.5-2 mm/h) · Transparente/blanco = sin precipitación",
+
+  "Onda Corta Superficial":
+    "CERES | Clouds and the Earth's Radiant Energy System, radiación solar de onda corta difusa que llega a la superficie terrestre (W/m²), producto SIN1deg de 1 grado de resolución (~110 km), diario. Mide la energía disponible para fotosíntesis y evapotranspiración. Se usa para estimar el potencial productivo de una región, zonificación de cultivos según disponibilidad de radiación y modelación del crecimiento.\n"+
+    "Colores (NASA GIBS CERES Shortwave): Rojo/amarillo intenso = alta radiación (>300 W/m²) · Verde = radiación media (150-300 W/m²) · Azul = baja radiación (<150 W/m²) · Gris = radiación mínima o nula (noche, latitudes altas en invierno)",
+
+  "Land Cover IGBP":
+    "MODIS | Clasificación anual de cobertura terrestre (MCD12Q1) del International Geosphere-Biosphere Programme, 17 clases a 500 m de resolución derivadas del algoritmo de decisión supervisada CART. Se usa para identificar tipos de cobertura (cultivos, pasturas, bosques), delimitar áreas agrícolas, detectar cambios de uso del suelo interanuales y estratificar zonas de muestreo.\n"+
+    "Colores (NASA GIBS, leyenda IGBP): Verde oscuro = bosque siempreverde · Verde claro = bosque caducifolio · Naranja = matorrales · Amarillo = cultivos de secano · Verde pastel = pasturas · Marrón = vegetación dispersa · Gris = áreas urbanas · Azul = agua · Blanco = hielo/nieve",
+
+  "Anomalía Agua Total":
+    "GRACE | Gravity Recovery and Climate Experiment, anomalía en el almacenamiento total de agua terrestre (Terrestrial Water Storage) derivada de variaciones en el campo gravitatorio terrestre medidas por los satélites GRACE y GRACE-FO, expresada en cm de altura equivalente de agua, resolución ~100 km, paso mensual. Integra agua superficial, subsuperficial, suelo y acuíferos. Se usa para monitorear sequías regionales, evaluar disponibilidad de agua para riego a escala de cuenca y detectar tendencias en la recarga de acuíferos.\n"+
+    "Colores (NASA GIBS GRACE): Azul intenso = mucho más húmedo que el promedio histórico (+15 cm) · Azul claro = ligeramente más húmedo (+5 cm) · Blanco = normal (±2 cm) · Naranja/marrón = más seco que el promedio (-5 cm) · Rojo = sequía severa (-15 cm o menos)",
+
+  "pH (0-5cm)":
+    "ISRIC SoilGrids | pH medido en agua (relación 1:2.5 suelo:agua) en la capa 0-5 cm, valor mediano (Q0.5) del modelo de regresión espacial basado en ~150,000 perfiles de suelo globales y covariables ambientales. Escala 0-14. Se usa para evaluar acidez o alcalinidad del suelo, determinar necesidad de encalado, diagnosticar toxicidad por aluminio (pH <5.5) y deficiencias de micronutrientes (hierro, zinc en pH alcalino >7.5), y planificar la fertilización.\n"+
+    "Colores (SoilGrids pH): Rojo intenso = fuertemente ácido (<5.0), probable toxicidad Al · Naranja = ácido (5.0-6.0), sensible a encalado · Amarillo/verde = neutro a ligeramente ácido (6.0-7.0), óptimo para la mayoría de cultivos · Verde azulado = ligeramente alcalino (7.0-7.5) · Azul = alcalino (>7.5), deficiencias de Fe, Zn, Mn",
+
+  "Carbono Orgánico SOC":
+    "ISRIC SoilGrids | Carbono orgánico del suelo en la capa 0-5 cm en g/kg, estimado por modelo de regresión espacial (modelo ensemble de Random Forest) con perfiles globales y covariables como NDVI, clima, geomorfología. Indicador clave de la salud del suelo: retención de nutrientes, estructura, actividad biológica y capacidad de intercambio. Se usa para evaluar fertilidad edáfica, secuestro de carbono y degradación del suelo.\n"+
+    "Colores (SoilGrids SOC): Marrón oscuro/negro = muy alto (>30 g/kg), suelos orgánicos o con alta acumulación de materia orgánica · Marrón = alto (15-30), suelos fértiles · Beige/marrón claro = medio (8-15) · Beige claro = bajo (4-8), suelos degradados · Rojizo/blanco = muy bajo (<4), suelos arenosos o severamente erosionados",
+
+  "Arcilla (textura)":
+    "ISRIC SoilGrids | Contenido de arcilla (fracción <0.002 mm) en la capa 0-5 cm en porcentaje en peso, estimado por modelo de regresión espacial. La arcilla determina la retención de agua y nutrientes, la estabilidad estructural y la susceptibilidad a la erosión. Se usa para clasificar textura del suelo, estimar capacidad de retención de agua, planificar manejo de riego y labranza, y zonificar lotes para agricultura de precisión.\n"+
+    "Colores (SoilGrids Clay): Rojo/naranja = arcilloso (>35%), alta retención, drenaje lento, difícil laboreo · Amarillo = franco arcilloso (20-35%), textura ideal · Verde/azul = bajo contenido de arcilla (<15%), arenoso, baja retención, fácil laboreo pero susceptible a lixiviación",
+
+  "Arena (textura)":
+    "ISRIC SoilGrids | Contenido de arena (fracción 0.05-2 mm) en la capa 0-5 cm en porcentaje en peso. La arena determina la permeabilidad, la capacidad de infiltración y la susceptibilidad a la sequía. Se usa complementariamente con arcilla y limo para la clasificación textural (triángulo textural), estimar la velocidad de infiltración y planificar el manejo del riego.\n"+
+    "Colores (SoilGrids Sand): Amarillo/naranja = arenoso (>65%), muy permeable, baja retención de agua y nutrientes, alto riesgo de lixiviación · Verde = textura franca (35-65%), balanceada · Azul = bajo contenido de arena (<35%), textura fina, arcillosa o limosa",
+
+  "Limo (textura)":
+    "ISRIC SoilGrids | Contenido de limo (fracción 0.002-0.05 mm) en la capa 0-5 cm en porcentaje en peso. El limo, junto con arcilla y arena, completa la clasificación textural. Los suelos con alto contenido de limo (>40%) suelen ser francos y profundos, ideales para la agricultura por su balance entre retención de agua y aireación. Se usa para complementar la caracterización textural.\n"+
+    "Colores (SoilGrids Silt): Verde = alto contenido de limo (>40%), suelos francos ideales · Amarillo = contenido medio (20-40%) · Rojo = bajo contenido de limo (<20%), textura dominada por arena o arcilla",
+
+  "CIC (nutrientes)":
+    "ISRIC SoilGrids | Capacidad de Intercambio Catiónico en cmol(c)/kg en la capa 0-5 cm. Mide la capacidad del suelo para retener cationes intercambiables (Ca²⁺, Mg²⁺, K⁺, Na⁺) mediante cargas negativas en la superficie de arcillas y materia orgánica. Es un indicador directo de la fertilidad potencial del suelo. Se usa para estimar la necesidad de fertilizantes, evaluar la respuesta a la fertilización y planificar dosis de potasio, calcio y magnesio.\n"+
+    "Colores (SoilGrids CEC): Verde oscuro = muy alta (>25), suelos con arcillas 2:1 o alto contenido de MO · Verde = alta (15-25), buena fertilidad potencial · Amarillo = media (5-15), fertilidad moderada · Naranja/rojo = baja (<5), suelos arenosos, baja retención, altas pérdidas por lixiviación",
+
+  "Densidad Aparente":
+    "ISRIC SoilGrids | Bulk density en kg/dm³ (cg/cm³ /100) en la capa 0-5 cm. Relaciona la masa de suelo seco con su volumen total, incluyendo espacios porosos. Es un indicador de compactación, aireación y facilidad para la penetración de raíces. Se usa para diagnosticar compactación por maquinaria agrícola, convertir concentraciones de nutrientes (g/kg) a contenido volumétrico (kg/ha) y evaluar la calidad física del suelo.\n"+
+    "Colores (SoilGrids BDOD): Rojo = compactado (>1.6 kg/dm³), restricción al crecimiento radicular y a la infiltración · Amarillo = moderado (1.3-1.6), sin restricciones severas · Verde = normal (1.0-1.3), buena estructura y porosidad · Azul/verde claro = suelto (<1.0), alta porosidad, suelos orgánicos o recién labrados",
+
+  "Nitrógeno Total":
+    "ISRIC SoilGrids | Nitrógeno total en la capa 0-5 cm en g/kg, que incluye N orgánico (mayoría) y N inorgánico (NH₄⁺, NO₃⁻). El N total se correlaciona con el contenido de materia orgánica y determina el potencial de mineralización de nitrógeno disponible para los cultivos. Se usa para diagnosticar la fertilidad nitrogenada del suelo, planificar la fertilización con N y estimar la materia orgánica (N total × 20 ≈ MO).\n"+
+    "Colores (SoilGrids Nitrogen): Verde oscuro = alto (>3.0 g/kg), alta materia orgánica, buena fertilidad · Verde = medio (1.5-3.0) · Amarillo = bajo (0.5-1.5), requiere fertilización nitrogenada · Rojo = muy bajo (<0.5), suelos degradados, baja capacidad de suministro de N",
+
+  "Agua CC (10kPa)":
+    "ISRIC SoilGrids | Capacidad de campo (Water content at 10 kPa suction) en % v/v, capa 0-5 cm. Es la cantidad de agua que retiene el suelo después del drenaje por gravedad, considerada el límite superior de agua disponible para las plantas. Depende de la textura y estructura del suelo. Se usa, junto con el punto de marchitez (PMP), para estimar el agua útil total: Agua útil = CC - PMP. Esencial para calcular la lámina de riego y el balance hídrico del cultivo.\n"+
+    "Colores (SoilGrids WV0010): Azul oscuro = alta retención (>40%), suelos arcillosos, mayor capacidad de almacenamiento · Azul = moderada (25-40%) · Azul claro = baja retención (<25%), suelos arenosos, requieren riegos más frecuentes con menor lámina",
+
+  "Agua PMP (1500kPa)":
+    "ISRIC SoilGrids | Punto de marchitez permanente (Water content at 1500 kPa) en % v/v, capa 0-5 cm. Es la cantidad de agua retenida por el suelo a una succión de 1500 kPa, por debajo de la cual las plantas no pueden extraer agua y se marchitan irreversiblemente. Depende principalmente de la textura (arcilla > arena). Se usa para calcular el agua útil (CC - PMP) y determinar la fracción de agotamiento permitido para programar el riego.\n"+
+    "Colores (SoilGrids WV1500): Azul oscuro = alta retención en PMP (>25%), suelos arcillosos donde el agua está fuertemente retenida · Azul = moderada (12-25%) · Azul claro = baja (<12%), suelos arenosos donde casi toda el agua está disponible a bajas succiones. Agua útil (CC - PMP) suele ser mayor en suelos francos que en arcillosos o arenosos"
 };
 
 // ---- Help Modal ----
