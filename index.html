@@ -17,14 +17,32 @@
   #info-panel h4 { margin: 0 0 5px 0; font-size: 13px; }
   #info-panel p { margin: 3px 0; }
   #info-panel .desc { margin-top: 5px; border-top: 1px solid #ddd; padding-top: 4px; font-size: 11px; color: #555; }
-  .leaflet-control-layers { overflow-y: auto; max-height: 75vh; max-width: 300px; }
-  .leaflet-control-layers label { font-size: 12px; }
-  .group-header {
-    font-size: 11px; font-weight: bold; padding: 6px 0 2px 8px;
-    margin-top: 6px; border-bottom: 1px solid #ddd; color: #555;
-    letter-spacing: 0.5px;
+  .leaflet-control-layers { font-size: 12px; }
+  .leaflet-control-layers-list { overflow-y: auto; max-height: 75vh; }
+  .leaflet-control-layers label {
+    font-size: 12px; padding: 3px 4px; display: flex; align-items: flex-start;
+    cursor: pointer; gap: 4px;
   }
-  .group-header:first-of-type { margin-top: 0; }
+  .leaflet-control-layers label:hover { background: #f0f0f0; border-radius: 3px; }
+  .leaflet-control-layers input[type="checkbox"],
+  .leaflet-control-layers input[type="radio"] { margin: 2px 0 0 0; flex-shrink: 0; }
+  .leaflet-control-layers-base { padding-bottom: 6px; }
+  .leaflet-control-layers-separator { margin: 6px 0; border-top: 1px solid #ccc; }
+  .layers-title {
+    font-size: 11px; font-weight: bold; text-transform: uppercase;
+    color: #777; padding: 2px 4px 4px; letter-spacing: 0.5px;
+  }
+  .group-header {
+    font-size: 11px; font-weight: bold;
+    padding: 4px 6px; margin: 4px 0 0 0;
+    background: #546e7a; color: white;
+    border-radius: 3px; cursor: pointer; user-select: none;
+    display: flex; align-items: center; gap: 4px;
+  }
+  .group-header:hover { background: #455a64; }
+  .group-toggle { font-family: monospace; font-size: 14px; width: 14px; text-align: center; flex-shrink: 0; }
+  .group-body { padding-left: 2px; }
+  .group-body label { margin-left: 4px; }
 
   #help-btn {
     position: absolute; top: 10px; right: 10px; z-index: 1000;
@@ -604,32 +622,97 @@ var baseMaps = {
   "🇦🇷 IGN Argentina": ign
 };
 
-function buildGroupedControl(baseMaps, groups) {
-  var flat = {};
-  for (var g = 0; g < groups.length; g++) {
-    for (var key in groups[g].layers) {
-      flat[key] = groups[g].layers[key];
-    }
-  }
-  var ctrl = L.control.layers(baseMaps, flat, { collapsed: false }).addTo(map);
-  var container = document.querySelector('.leaflet-control-layers-overlays');
-  if (!container) return ctrl;
-  for (var g = groups.length - 1; g >= 0; g--) {
-    var firstKey = Object.keys(groups[g].layers)[0];
-    if (!firstKey) continue;
-    var labels = container.querySelectorAll('label');
-    for (var l = 0; l < labels.length; l++) {
-      if (labels[l].innerHTML.indexOf(firstKey) >= 0) {
-        var hdr = document.createElement('div');
-        hdr.className = 'group-header';
-        hdr.textContent = groups[g].name;
-        container.insertBefore(hdr, labels[l]);
-        break;
+L.Control.AccordionLayers = L.Control.extend({
+  options: { position: 'topright' },
+  initialize: function (baseLayers, groups, options) {
+    L.setOptions(this, options);
+    this._baseLayers = baseLayers;
+    this._groups = groups;
+    this._layerRefs = {};
+    for (var g = 0; g < groups.length; g++) {
+      for (var name in groups[g].layers) {
+        this._layerRefs[name] = groups[g].layers[name];
       }
     }
+    this._activeOverlays = {};
+  },
+  onAdd: function (map) {
+    this._map = map;
+    var self = this;
+    var container = L.DomUtil.create('div', 'leaflet-control-layers leaflet-control');
+    L.DomEvent.disableClickPropagation(container).disableScrollPropagation(container);
+    var list = L.DomUtil.create('div', 'leaflet-control-layers-list', container);
+    var baseDiv = L.DomUtil.create('div', 'leaflet-control-layers-base', list);
+    L.DomUtil.create('div', 'layers-title', baseDiv).textContent = '🗺 Mapas Base';
+    var first = true;
+    for (var name in this._baseLayers) {
+      (function (n, l) {
+        var label = L.DomUtil.create('label', '', baseDiv);
+        var input = L.DomUtil.create('input', 'leaflet-control-layers-selector', label);
+        input.type = 'radio'; input.name = 'leaflet-base-layers';
+        input.checked = first;
+        var span = L.DomUtil.create('span', '', label);
+        span.innerHTML = ' ' + n;
+        if (first) { self._activeBaseLayer = l; first = false; }
+        L.DomEvent.on(input, 'click', function () {
+          if (self._activeBaseLayer) map.removeLayer(self._activeBaseLayer);
+          map.addLayer(l);
+          self._activeBaseLayer = l;
+        });
+      })(name, this._baseLayers[name]);
+    }
+    L.DomUtil.create('div', 'leaflet-control-layers-separator', list);
+    var overDiv = L.DomUtil.create('div', 'leaflet-control-layers-overlays', list);
+    L.DomUtil.create('div', 'layers-title', overDiv).textContent = '📡 Capas Satelitales';
+    for (var g = 0; g < groups.length; g++) {
+      this._addGroup(overDiv, groups[g], g);
+    }
+    return container;
+  },
+  _addGroup: function (container, group, idx) {
+    var self = this;
+    var header = L.DomUtil.create('div', 'group-header', container);
+    header.setAttribute('data-group', idx);
+    var toggle = L.DomUtil.create('span', 'group-toggle', header);
+    toggle.textContent = '−';
+    var title = L.DomUtil.create('span', '', header);
+    title.textContent = group.name;
+    var body = L.DomUtil.create('div', 'group-body', container);
+    for (var name in group.layers) {
+      (function (n, l) {
+        var label = L.DomUtil.create('label', '', body);
+        var input = L.DomUtil.create('input', '', label);
+        input.type = 'checkbox';
+        var span = L.DomUtil.create('span', '', label);
+        span.innerHTML = n;
+        L.DomEvent.on(input, 'click', function () {
+          if (input.checked) {
+            self._map.addLayer(l);
+            self._activeOverlays[n] = l;
+            self._updateDescription(n);
+          } else {
+            self._map.removeLayer(l);
+            delete self._activeOverlays[n];
+          }
+        });
+      })(name, group.layers[name]);
+    }
+    L.DomEvent.on(header, 'click', function (e) {
+      if (e.target.tagName === 'INPUT') return;
+      var collapsed = body.style.display === 'none';
+      body.style.display = collapsed ? '' : 'none';
+      toggle.textContent = collapsed ? '−' : '+';
+    });
+  },
+  _updateDescription: function (name) {
+    var clean = name.replace(/<[^>]+>/g, '').trim();
+    var found = null;
+    for (var key in descs) {
+      if (clean.indexOf(key) !== -1 || key.indexOf(clean) !== -1) { found = descs[key]; break; }
+    }
+    document.getElementById('layer-desc').textContent = found || 'Seleccioná una capa para ver su descripción.';
   }
-  return ctrl;
-}
+});
 
 var groups = [
   { name: '🟡 SAOCOM', layers: {
@@ -698,7 +781,7 @@ var groups = [
   }}
 ];
 
-buildGroupedControl(baseMaps, groups);
+new L.Control.AccordionLayers(baseMaps, groups).addTo(map);
 
 // ---- Actualizar descripción de capa activa ----
 var descs = {
@@ -738,13 +821,6 @@ var descs = {
   "Agua CC (10kPa)": "SoilGrids: Capacidad de campo a 10kPa (% v/v). Agua retenida después de drenaje. Máximo agua disponible para el cultivo.",
   "Agua PMP (1500kPa)": "SoilGrids: Punto de marchitez a 1500kPa (% v/v). Agua no disponible. Agua útil = CC - PMP."
 };
-
-map.on('overlayadd', function (e) {
-  var name = e.name.replace(/<[^>]+>/g, '').trim();
-  var found = null;
-  for (var key in descs) { if (name.indexOf(key) !== -1 || key.indexOf(name) !== -1) { found = descs[key]; break; } }
-  document.getElementById('layer-desc').textContent = found || 'Seleccioná una capa para ver su descripción.';
-});
 
 // ---- Help Modal ----
 document.getElementById('help-btn').onclick = function () {
