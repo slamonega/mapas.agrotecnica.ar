@@ -905,9 +905,10 @@ function sgRefreshDepths() {
   }
 }
 
-var sgHeader = L.DomUtil.create('div', 'group-header', sgOverlays);
+var sgFragment = document.createDocumentFragment();
+var sgHeader = L.DomUtil.create('div', 'group-header', sgFragment);
 sgHeader.innerHTML = "<span class='group-toggle'>−</span>🧪 Suelo (SoilGrids 250m)";
-var sgPills = L.DomUtil.create('div', 'sg-pills', sgOverlays);
+var sgPills = L.DomUtil.create('div', 'sg-pills', sgFragment);
 var depthLabel = L.DomUtil.create('div', 'sg-pill-label', sgPills);
 depthLabel.textContent = 'Profundidad';
 var depthRow = L.DomUtil.create('div', 'sg-pill-row', sgPills);
@@ -938,7 +939,10 @@ SG_STATS.forEach(function(s) {
     sgRefreshDepths();
   });
 });
-var sgBody = L.DomUtil.create('div', 'group-body', sgOverlays);
+var sgBody = L.DomUtil.create('div', 'group-body', sgFragment);
+// Insert SoilGrids group after SAOCOM (first group)
+var ref = sgOverlays.querySelectorAll('.group-header')[1];
+sgOverlays.insertBefore(sgFragment, ref);
 SG_PROPS.forEach(function(prop) {
   var label = L.DomUtil.create('label', '', sgBody);
   var input = L.DomUtil.create('input', '', label);
