@@ -865,7 +865,7 @@ var accordion = new L.Control.AccordionLayers(baseMaps, groups).addTo(map);
 
 // ---- Dynamic SoilGrids Group (depth + statistic selectors) ----
 var SG_DEPTHS = ['0-5cm','5-15cm','15-30cm','30-60cm','60-100cm','100-200cm'];
-var SG_STATS = ['Q0.5','mean','Q0.05','Q0.95'];
+var SG_STATS = [{label:'Q0.5', value:'Q0.5'},{label:'media', value:'mean'},{label:'Q0.05', value:'Q0.05'},{label:'Q0.95', value:'Q0.95'}];
 var SG_PROPS = [
   {id:'phh2o', label:'pH'},
   {id:'soc', label:'Carbono Orgánico SOC'},
@@ -929,11 +929,11 @@ statLabel.textContent = 'Estadístico';
 var statRow = L.DomUtil.create('div', 'sg-pill-row', sgPills);
 SG_STATS.forEach(function(s) {
   var pill = L.DomUtil.create('span', 'sg-pill', statRow);
-  if (s === sgState.stat) L.DomUtil.addClass(pill, 'active');
-  pill.textContent = s;
+  if (s.value === sgState.stat) L.DomUtil.addClass(pill, 'active');
+  pill.textContent = s.label;
   L.DomEvent.on(pill, 'click', function() {
-    if (sgState.stat === s) return;
-    sgState.stat = s;
+    if (sgState.stat === s.value) return;
+    sgState.stat = s.value;
     statRow.querySelectorAll('.sg-pill').forEach(function(el) { L.DomUtil.removeClass(el, 'active'); });
     L.DomUtil.addClass(pill, 'active');
     sgRefreshDepths();
