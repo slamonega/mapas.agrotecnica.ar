@@ -31,6 +31,11 @@
   }
   #info-panel-body.collapsed { display: none; }
   #info-panel .desc { font-size: 11px; color: #444; line-height: 1.4; }
+  #attribution-custom {
+    position: absolute; bottom: 3px; right: 3px; z-index: 1000;
+    font-family: Arial, sans-serif; font-size: 11px; color: #666;
+    background: rgba(255,255,255,0.7); padding: 2px 6px; border-radius: 3px;
+  }
   .leaflet-control-layers { font-size: 12px; }
   .leaflet-control-layers-list { overflow-y: auto; max-height: 75vh; }
   .leaflet-control-layers label {
@@ -142,6 +147,8 @@
 </div>
 
 <button id="help-btn" title="Guía de indicadores">?</button>
+
+<div id="attribution-custom">agrotecnica.ar</div>
 
 <div id="help-modal">
   <div id="help-content">
@@ -525,7 +532,6 @@ function gibsLayer(layerName, opts) {
 
 // ---- Inicializar mapa ----
 var map = L.map('map', { maxZoom: 18, attributionControl: false }).setView([-36.5, -60.5], 5);
-L.control.attribution({prefix: 'agrotecnica.ar'}).addTo(map);
 
 // ---- BASEMAPS ----
 var osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
