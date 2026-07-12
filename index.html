@@ -31,20 +31,6 @@
   }
   #info-panel-body.collapsed { display: none; }
   #info-panel .desc { font-size: 11px; color: #444; line-height: 1.4; }
-  #query-btn {
-    font-size: 14px; width: 20px; height: 18px; text-align: center; line-height: 18px;
-    cursor: pointer; flex-shrink: 0; border-radius: 3px; background: rgba(255,255,255,0.2);
-    transition: all 0.15s;
-  }
-  #query-btn:hover { background: rgba(255,255,255,0.4); }
-  #query-btn.active { background: #ff8a65; color: #fff; }
-  .query-popup-title { font-size: 12px; font-weight: bold; margin-bottom: 4px; color: #546e7a; }
-  .query-popup-table { width: 100%; border-collapse: collapse; font-size: 11px; }
-  .query-popup-table td { padding: 2px 6px; border-bottom: 1px solid #eee; }
-  .query-popup-table tr:last-child td { border-bottom: none; }
-  .query-popup-label { font-weight: bold; color: #555; white-space: nowrap; padding-right: 10px; }
-  .query-popup-value { color: #222; text-align: right; }
-  .query-popup-na { color: #999; font-style: italic; text-align: right; }
   .leaflet-control-layers { font-size: 12px; }
   .leaflet-control-layers-list { overflow-y: auto; max-height: 75vh; }
   .leaflet-control-layers label {
@@ -148,10 +134,7 @@
 <div id="info-panel">
   <div id="info-panel-header">
     <span>📋 Capa activa</span>
-    <span style="display:flex;gap:2px">
-      <span id="query-btn" title="Consultar capas en un punto">📍</span>
-      <span id="info-toggle">−</span>
-    </span>
+    <span id="info-toggle">−</span>
   </div>
   <div id="info-panel-body">
     <div class="desc" id="layer-desc">Seleccioná una capa para ver qué mide, para qué se usa y cómo interpretar sus colores.</div>
@@ -680,7 +663,6 @@ var saocom = L.tileLayer.wms('https://geoservicios3.conae.gov.ar/geoserver/Humed
   layers: 'DSS_MSMKR_1', styles: 'estilo_DSS_MSM', format: 'image/png',
   transparent: true, version: '1.1.1', attribution: '© CONAE - SAOCOM', opacity: 0.75
 });
-saocom._qname = 'SAOCOM Humedad Perfil 50cm';
 
 // ---- NBR (Normalized Burn Ratio - ESRI ImageServer) ----
 var s2nbr = L.tileLayer.esriImageServer(S2_BASE, {
@@ -904,15 +886,12 @@ function sgMakeLabel(prop) {
     " <span style='color:#999;font-size:10px'>(" + sgState.depth + ", " + sgState.stat + ")</span>";
 }
 function sgMakeLayer(propId) {
-  var prop = SG_PROPS.find(function(p){return p.id===propId;});
-  var layer = L.tileLayer.wms('https://maps.isric.org/mapserv?map=/map/' + propId + '.map', {
+  return L.tileLayer.wms('https://maps.isric.org/mapserv?map=/map/' + propId + '.map', {
     layers: propId + '_' + sgState.depth + '_' + sgState.stat,
     format: 'image/png', transparent: true,
     version: '1.3.0', attribution: '<a href="https://www.isric.org">ISRIC SoilGrids</a>',
     maxZoom: 12, minZoom: 2
   });
-  layer._qname = prop ? prop.label + ' (' + sgState.depth + ', ' + sgState.stat + ')' : propId;
-  return layer;
 }
 function sgRefreshDepths() {
   for (var id in sgState.entries) {
@@ -1163,195 +1142,6 @@ document.getElementById('info-panel-header').onclick = function () {
 };
 
 // ---- Point Query Tool ----
-var esriS2Names = {
-  '{"rasterFunction":"NDVI Colormap"}': 'S2 NDVI',
-  '{"rasterFunction":"NDMI Colorized"}': 'S2 NDMI',
-  '{"rasterFunction":"NDVI - with VRE Raw"}': 'S2 NDRE',
-  '{"rasterFunction":"NDVI - VRE only Raw"}': 'S2 VRE',
-  '{"rasterFunction":"Color Infrared with DRA"}': 'S2 Falso Color IR',
-  '{"rasterFunction":"Agriculture with DRA"}': 'S2 Agricultura',
-  '{"rasterFunction":"Short-wave Infrared with DRA"}': 'S2 SWIR',
-  '{"rasterFunction":"Geology with DRA"}': 'S2 Geología',
-  '{"rasterFunction":"Normalized Burn Ratio"}': 'S2 NBR'
-};
-var esriL8Names = {
-  '{"rasterFunction":"NDVI Colorized"}': 'L8 NDVI',
-  '{"rasterFunction":"Normalized Difference Moisture Index Colorized"}': 'L8 NDMI',
-  '{"rasterFunction":"Band 10 Surface Temperature in Celsius"}': 'L8 Temp. Superficial',
-  '{"rasterFunction":"Agriculture with DRA"}': 'L8 Agricultura',
-  '{"rasterFunction":"Geology with DRA"}': 'L8 Geología',
-  '{"rasterFunction":"NBR Raw"}': 'L8 NBR'
-};
-
-function getQueryName(layer) {
-  if (layer._qname) return layer._qname;
-  if (layer._esriUrl === S2_BASE) return esriS2Names[layer.options.renderingRule] || 'S2 capa';
-  if (layer._esriUrl === L8_BASE) return esriL8Names[layer.options.renderingRule] || 'L8 capa';
-  return null;
-}
-
-function isGibsLayer(layer) {
-  return layer._url && layer._url.indexOf('gibs.earthdata.nasa.gov') !== -1;
-}
-
-var queryActive = false;
-var queryBtn = document.getElementById('query-btn');
-
-function queryMapClick(evt) {
-  if (!queryActive) return;
-  var latlng = evt.latlng;
-  var promises = [];
-  var resultRows = [];
-
-  map.eachLayer(function(layer) {
-    if (layer === accordion._activeBaseLayer) return;
-    var name = getQueryName(layer);
-    if (!name) return;
-
-    if (isGibsLayer(layer)) {
-      resultRows.push({ name: name, value: 'no consultable', na: true });
-      return;
-    }
-
-    // ESRI ImageServer
-    if (layer._esriUrl) {
-      var identifyUrl = layer._esriUrl.replace('/exportImage', '/identify');
-      var params = 'geometry=' + latlng.lng + ',' + latlng.lat +
-        '&geometryType=esriGeometryPoint&f=json' +
-        '&renderingRule=' + encodeURIComponent(layer.options.renderingRule) +
-        '&returnGeometry=false&returnCatalogItems=false';
-      var url = identifyUrl + '?' + params;
-      promises.push(
-        fetch(url).then(function(r) { return r.json(); }).then(function(data) {
-          var val = data.value !== undefined ? data.value : (data.properties && data.properties.value);
-          if (val !== undefined && val !== null) {
-            var num = parseFloat(val);
-            return { name: name, value: isNaN(num) ? val : num.toFixed(4), na: false };
-          }
-          return { name: name, value: 'sin datos', na: true };
-        }).catch(function() {
-          return { name: name, value: 'error consulta', na: true };
-        })
-      );
-      return;
-    }
-
-    // WMS (SoilGrids, SAOCOM)
-    if (layer instanceof L.TileLayer.WMS) {
-      // Build GetFeatureInfo URL manually for reliability
-      var point = map.latLngToContainerPoint(latlng, map.getZoom());
-      var size = map.getSize();
-      var bounds = map.getBounds();
-      var version = layer.wmsParams.version || '1.3.0';
-      var params = {
-        'SERVICE': 'WMS',
-        'VERSION': version,
-        'REQUEST': 'GetFeatureInfo',
-        'FORMAT': layer.wmsParams.format || 'image/png',
-        'TRANSPARENT': layer.wmsParams.transparent || true,
-        'QUERY_LAYERS': layer.wmsParams.layers,
-        'LAYERS': layer.wmsParams.layers,
-        'STYLES': layer.wmsParams.styles || '',
-        'BBOX': bounds.toBBoxString(),
-        'WIDTH': Math.round(size.x),
-        'HEIGHT': Math.round(size.y),
-        'INFO_FORMAT': 'application/geo+json',
-        'FEATURE_COUNT': 1
-      };
-      if (version === '1.3.0') {
-        params.CRS = layer.wmsParams.crs || 'EPSG:3857';
-        params.I = Math.round(point.x);
-        params.J = Math.round(point.y);
-      } else {
-        params.SRS = layer.wmsParams.crs || 'EPSG:3857';
-        params.X = Math.round(point.x);
-        params.Y = Math.round(point.y);
-      }
-      var parts = [];
-      for (var key in params) parts.push(encodeURIComponent(key) + '=' + encodeURIComponent(params[key]));
-      var infoUrl = layer._url + (layer._url.indexOf('?') !== -1 ? '&' : '?') + parts.join('&');
-      promises.push(
-        fetch(infoUrl).then(function(r) {
-          var ct = r.headers.get('content-type') || '';
-          if (ct.indexOf('geo+json') !== -1 || ct.indexOf('json') !== -1) return r.json();
-          return r.text().then(function(t) { return { _text: t }; });
-        }).then(function(data) {
-          // application/geo+json returns FeatureCollection
-          if (data.features && data.features[0]) {
-            var props = data.features[0].properties;
-            if (props && props.value !== undefined) {
-              return { name: name, value: String(props.value), na: false };
-            }
-            if (props && props.GRAY_INDEX !== undefined) {
-              return { name: name, value: String(props.GRAY_INDEX), na: false };
-            }
-            var vals = [];
-            for (var k in props) {
-              if (props[k] !== null && props[k] !== undefined) vals.push(props[k]);
-            }
-            return { name: name, value: vals.join(', ') || 'sin datos', na: vals.length === 0 };
-          }
-          // Single pixel value
-          if (data.value !== undefined) {
-            return { name: name, value: String(data.value), na: false };
-          }
-          // text/plain or text/html response
-          if (data._text) {
-            var v = data._text.replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim();
-            var m = v.match(/:\s*([\d\.\-Ee+]+)/);
-            if (m) return { name: name, value: m[1], na: false };
-            return { name: name, value: v.substring(0, 80) || 'sin datos', na: false };
-          }
-          return { name: name, value: 'sin datos', na: true };
-        }).catch(function() {
-          return { name: name, value: 'error consulta', na: true };
-        })
-      );
-    }
-  });
-
-  if (promises.length === 0 && resultRows.length === 0) {
-    L.popup().setLatLng(latlng).setContent(
-      "<div class='query-popup'><div class='query-popup-title'>📍 Consulta</div>" +
-      "<em>No hay capas consultables activas</em></div>"
-    ).openOn(map);
-    return;
-  }
-
-  var loadingPopup = L.popup({ className: 'query-popup-container' })
-    .setLatLng(latlng)
-    .setContent("<div class='query-popup'><div class='query-popup-title'>📍 Consultando...</div><em>Cargando...</em></div>")
-    .openOn(map);
-
-  Promise.all(promises).then(function(results) {
-    var all = resultRows.concat(results);
-    var html = "<div class='query-popup'>" +
-      "<div class='query-popup-title'>📍 Consulta de capas</div>" +
-      "<table class='query-popup-table'>";
-    all.forEach(function(r) {
-      html += "<tr><td class='query-popup-label'>" + r.name + "</td>" +
-        (r.na ? "<td class='query-popup-na'>" + r.value + "</td>" : "<td class='query-popup-value'>" + r.value + "</td>") +
-        "</tr>";
-    });
-    html += "</table></div>";
-    loadingPopup.setContent(html);
-  });
-}
-
-L.DomEvent.on(queryBtn, 'click', function(e) {
-  L.DomEvent.stopPropagation(e);
-  queryActive = !queryActive;
-  if (queryActive) {
-    L.DomUtil.addClass(queryBtn, 'active');
-    map.getContainer().style.cursor = 'crosshair';
-  } else {
-    L.DomUtil.removeClass(queryBtn, 'active');
-    map.getContainer().style.cursor = '';
-  }
-});
-
-map.on('click', queryMapClick);
-
 // ---- Help Modal ----
 document.getElementById('help-btn').onclick = function () {
   document.getElementById('help-modal').classList.add('show');
