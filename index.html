@@ -525,6 +525,7 @@ function gibsLayer(layerName, opts) {
 
 // ---- Inicializar mapa ----
 var map = L.map('map', { maxZoom: 18, attributionControl: false }).setView([-36.5, -60.5], 5);
+L.control.attribution({prefix: 'agrotecnica.ar'}).addTo(map);
 
 // ---- BASEMAPS ----
 var osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
