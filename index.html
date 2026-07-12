@@ -1238,31 +1238,69 @@ function queryMapClick(evt) {
 
     // WMS (SoilGrids, SAOCOM)
     if (layer instanceof L.TileLayer.WMS) {
-      var infoUrl = layer.getFeatureInfoUrl(latlng, {
-        info_format: 'application/json',
-        feature_count: 1
-      });
-      if (!infoUrl) {
-        resultRows.push({ name: name, value: 'no disponible', na: true });
-        return;
+      // Build GetFeatureInfo URL manually for reliability
+      var point = map.latLngToContainerPoint(latlng, map.getZoom());
+      var size = map.getSize();
+      var bounds = map.getBounds();
+      var version = layer.wmsParams.version || '1.3.0';
+      var params = {
+        'SERVICE': 'WMS',
+        'VERSION': version,
+        'REQUEST': 'GetFeatureInfo',
+        'FORMAT': layer.wmsParams.format || 'image/png',
+        'TRANSPARENT': layer.wmsParams.transparent || true,
+        'QUERY_LAYERS': layer.wmsParams.layers,
+        'LAYERS': layer.wmsParams.layers,
+        'STYLES': layer.wmsParams.styles || '',
+        'BBOX': bounds.toBBoxString(),
+        'WIDTH': Math.round(size.x),
+        'HEIGHT': Math.round(size.y),
+        'INFO_FORMAT': 'application/geo+json',
+        'FEATURE_COUNT': 1
+      };
+      if (version === '1.3.0') {
+        params.CRS = layer.wmsParams.crs || 'EPSG:3857';
+        params.I = Math.round(point.x);
+        params.J = Math.round(point.y);
+      } else {
+        params.SRS = layer.wmsParams.crs || 'EPSG:3857';
+        params.X = Math.round(point.x);
+        params.Y = Math.round(point.y);
       }
+      var parts = [];
+      for (var key in params) parts.push(encodeURIComponent(key) + '=' + encodeURIComponent(params[key]));
+      var infoUrl = layer._url + (layer._url.indexOf('?') !== -1 ? '&' : '?') + parts.join('&');
       promises.push(
         fetch(infoUrl).then(function(r) {
           var ct = r.headers.get('content-type') || '';
-          if (ct.indexOf('json') !== -1) return r.json();
-          return r.text().then(function(t) { return { _html: t }; });
+          if (ct.indexOf('geo+json') !== -1 || ct.indexOf('json') !== -1) return r.json();
+          return r.text().then(function(t) { return { _text: t }; });
         }).then(function(data) {
-          if (data._html) {
-            var v = data._html.replace(/<[^>]+>/g,'').replace(/\s+/g,' ').trim();
-            return { name: name, value: v || 'sin datos', na: false };
-          }
+          // application/geo+json returns FeatureCollection
           if (data.features && data.features[0]) {
             var props = data.features[0].properties;
-            var v = Object.keys(props).map(function(k) { return props[k]; }).join(', ');
-            return { name: name, value: v || 'sin datos', na: false };
+            if (props && props.value !== undefined) {
+              return { name: name, value: String(props.value), na: false };
+            }
+            if (props && props.GRAY_INDEX !== undefined) {
+              return { name: name, value: String(props.GRAY_INDEX), na: false };
+            }
+            var vals = [];
+            for (var k in props) {
+              if (props[k] !== null && props[k] !== undefined) vals.push(props[k]);
+            }
+            return { name: name, value: vals.join(', ') || 'sin datos', na: vals.length === 0 };
           }
+          // Single pixel value
           if (data.value !== undefined) {
             return { name: name, value: String(data.value), na: false };
+          }
+          // text/plain or text/html response
+          if (data._text) {
+            var v = data._text.replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim();
+            var m = v.match(/:\s*([\d\.\-Ee+]+)/);
+            if (m) return { name: name, value: m[1], na: false };
+            return { name: name, value: v.substring(0, 80) || 'sin datos', na: false };
           }
           return { name: name, value: 'sin datos', na: true };
         }).catch(function() {
